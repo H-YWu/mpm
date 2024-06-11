@@ -8,7 +8,7 @@ file(GLOB LIB_CUDA_SRCS ${LIB_SRC_DIR}/*.cu)
 # Interface library: compiler flags
 ## Target: external libraries
 add_library(external_libs INTERFACE)
-target_link_libraries(external_libs INTERFACE glfw glad)
+target_link_libraries(external_libs INTERFACE glfw glad Eigen3::Eigen)
 ## Target: general compiler flags
 add_library(compiler_flags INTERFACE)
 target_compile_features(compiler_flags INTERFACE cxx_std_17)
