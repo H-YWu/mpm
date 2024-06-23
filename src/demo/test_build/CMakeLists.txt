@@ -1,7 +1,0 @@
-file(GLOB EXE_CUDA_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.cu)
-file(GLOB EXE_CPP_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-
-set(EXECUTABLE_NAME test_build)
-add_executable(${EXECUTABLE_NAME} ${EXE_CUDA_SRCS} ${EXE_CPP_SRCS})
-target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${LIB_MPM_NAME})
-target_include_directories(${EXECUTABLE_NAME} PUBLIC ${INC_DIR})
