@@ -22,6 +22,8 @@ enum class IntegrationType {
 
 class MPMSolver3D {
 public:
+    bool _enable_particles_collision;
+
     MPMSolver3D(
         const thrust::host_vector<MaterialPoint3D> &particles,
         Eigen::Vector3d gridOrigin,
@@ -29,7 +31,8 @@ public:
         double gridStride,
         double gridBoundaryFrictionCoefficient,
         double blendCoefficient,
-        InterpolationType interpolationType
+        InterpolationType interpolationType,
+        double deltaTime
     );
     ~MPMSolver3D();
 
@@ -63,8 +66,12 @@ public:
 
     // Rendering
     //  Online: OpenGL
+    //  GPU/CUDA
     void registerGLBufferWithCUDA(const GLuint buffer);
     void updateGLBufferWithCUDA();
+    //  CPU
+    void saveGLBuffer(const GLuint buffer);
+    void updateGLBufferByCPU();
     //  Offline
     void writeToFile(std::string filePath);
 
@@ -73,16 +80,19 @@ protected:
     thrust::device_vector<MaterialPoint3D> _particles;
     // Eulerian
     thrust::device_vector<CollocatedGridData3D> _grid;
-    thrust::host_vector<CollocatedGridData3D> _host_grid;
     Grid3DSettings* _grid_settings;
     // Transfer: FLIP weight in PIC-FLIP blending
     double _blend_coefficient;
     // Interpolator for particle-grid transfer
     Interpolator3D* _interpolator;
+    // Default time step
+    double _delta_time;
 
-    bool _enable_particles_collision;
 
-    struct cudaGraphicsResource *vbo_resource;
+    // Rendering
+    //  OpenGL
+    struct cudaGraphicsResource *_cuda_vbo_resource;    // WARNING: not supported on WSL
+    GLuint _vbo_buffer; // work on CPU
 };
 
 }   // namespace chains

@@ -8,11 +8,10 @@ namespace chains {
 
 struct LevelSetCollisionObject3D
 {
-public:
     Eigen::VectorXd level_set;
 };
 
-__device__
+__host__ __device__
 Eigen::Vector3d applyBoundaryCollision(
     const Eigen::Vector3d& position,
     const Eigen::Vector3d& velocity,

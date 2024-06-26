@@ -7,7 +7,6 @@
 namespace chains {
 
 struct Grid3DSettings {
-public:
     Eigen::Vector3d origin, target; // target is the farthest point from origin
     Eigen::Vector3i resolution;
     double stride;
@@ -26,7 +25,6 @@ public:
 };
 
 struct CollocatedGridData3D {
-public:
     Eigen::Vector3i index;
     Eigen::Vector3d force;
     Eigen::Vector3d velocity, velocity_star;

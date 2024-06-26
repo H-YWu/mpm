@@ -60,7 +60,10 @@ MPM3DConfiguration parseYAML(const std::string& filePath) {
     // Parse Interpolation
     mpm_config.interp_type = parseInterpolationType(config_yaml_node["Interpolation"]["Type"].as<std::string>());
 
-    // Parse Interpolation
+    // Parse Simulate
+    mpm_config.delta_time = config_yaml_node["Simulate"]["deltaTime"].as<double>();
+
+    // Parse Render 
     mpm_config.offline = config_yaml_node["Render"]["Offline"].as<bool>();
     mpm_config.particle_frag_shader_path = config_yaml_node["Render"]["ParticleFragmentShader"].as<std::string>();
 

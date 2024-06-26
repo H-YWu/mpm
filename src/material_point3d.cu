@@ -1,6 +1,6 @@
 #include "material_point3d.h"
+#include "svd_eigen.h"
 
-#include <Eigen/SVD>
 #include <thrust/tuple.h>
 #include <cmath>
 
@@ -29,8 +29,8 @@ MaterialPoint3D::MaterialPoint3D(
     deformation_gradient_plastic.setIdentity();
 }
 
-__host__ __device__
-const Eigen::Matrix3d MaterialPoint3D::volumeTimesCauchyStress() const {
+__device__
+const Eigen::Matrix3d MaterialPoint3D::volumeTimesCauchyStress() {
     switch (constitutive_model)
     {
     case ConstitutiveModel::NEO_HOOKEAN:
@@ -44,82 +44,84 @@ const Eigen::Matrix3d MaterialPoint3D::volumeTimesCauchyStress() const {
     }
 }
 
-__host__ __device__
+__device__
 void MaterialPoint3D::updatePosition(double deltaTimeInSeconds) {
     position += deltaTimeInSeconds * velocity;
 }
 
-__host__ __device__
+__device__
 void MaterialPoint3D::updateDeformationGradient(Eigen::Matrix3d velocityGradient, double deltaTimeInSeconds) {
     deformation_gradient_elastic = 
         (Eigen::Matrix3d::Identity() + (deltaTimeInSeconds * velocityGradient))
-        * deformation_gradient_plastic;
+        * deformation_gradient_elastic;
     
     Eigen::Matrix3d F_full(deformation_gradient_elastic * deformation_gradient_plastic);
 
-    Eigen::JacobiSVD<Eigen::Matrix3d> svd(deformation_gradient_elastic, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Vector3d sig_val = svd.singularValues();
-    Eigen::Matrix3d U = svd.matrixU();
-    Eigen::Matrix3d V = svd.matrixV();
+    Eigen::Matrix3f u, v;
+    Eigen::Vector3f s;
+    Eigen::Matrix3f Fe = deformation_gradient_elastic.cast<float>();
+    svd3x3(Fe, u, s, v);
+    Eigen::Vector3d sig_vals = s.cast<double>();
     // Clamp the singular values to the permitted range
-    double lower_bnd = 1.0 - critical_compression;
-    double upper_bnd = 1.0 + critical_stretch;
-    for (int i = 0; i < 3; ++i) {
-        if (sig_val(i) < lower_bnd) {
-            sig_val(i) = lower_bnd;
-        } else if (sig_val(i) > upper_bnd) {
-            sig_val(i) = upper_bnd;
-        }
-    }
-    // Update elastic and plastic deformation gradient 
-    Eigen::Matrix3d sigma = sig_val.asDiagonal();
-    deformation_gradient_elastic = U * sigma * V.transpose();
-    deformation_gradient_plastic = V * sigma.inverse() * U.transpose() * F_full;
+    sig_vals = sig_vals.array().min(1.0+critical_stretch).max(1.0-critical_compression);
+    Eigen::Matrix3d S; S.setZero();
+    for (int i = 0; i < 3; i ++) S(i,i) = sig_vals(i);
+
+    Eigen::Matrix3d U = u.cast<double>(), V = v.cast<double>();
+
+    deformation_gradient_elastic = U * S * V.transpose();
+    deformation_gradient_plastic = V * S.inverse() * U.transpose() * F_full;
 }
 
-__host__ __device__
+__device__
 double MaterialPoint3D::fixedCorotatedEnergy() const {
     double mu_p, lambda_p;
     thrust::tie(mu_p, lambda_p) = plasticLame();
 
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(deformation_gradient_elastic, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Vector3d sigmas = svd.singularValues();
+    Eigen::Matrix3f u, v;
+    Eigen::Vector3f s;
+    Eigen::Matrix3f Fe = deformation_gradient_elastic.cast<float>();
+    svd3x3(Fe, u, s, v);
+    Eigen::Vector3d sig_vals = s.cast<double>();
+
     double Je = deformation_gradient_elastic.determinant();
 
     /* Fixed Corotated Model */
     //  \phi = \mu_P * \sum_{i=1}^{3} (\sigma_i - 1)^2 + \frac{\lambda_P}{2} (J_E - 1)^2
     double energy = 0.0;
     for (int i = 0; i < 3; i ++) {
-        energy += std::pow(sigmas(i)-1.0, 2);
+        energy += pow(sig_vals(i)-1.0, 2);
     }
     energy *= mu_p;
-    energy += 0.5 * lambda_p * std::pow(Je-1.0, 2);
+    energy += 0.5 * lambda_p * pow(Je-1.0, 2);
     return energy;
 }
 
-__host__ __device__
+__device__
 double MaterialPoint3D::NeoHookeanEnergy() const {
     double mu_p, lambda_p;
     thrust::tie(mu_p, lambda_p) = plasticLame();
 
     double Je = deformation_gradient_elastic.determinant();
+
     double traceFTF = (deformation_gradient_elastic.transpose() * deformation_gradient_elastic).trace();
 
     /* Neo-Hookean Model */
     //  \phi = \frac{\mu_P}{2}(\tr(F^T F) - 3) - \mu_P \log(J_E) _ \frac{\lambda_P}{2} \log^2(J_E)
-    return mu_p * (0.5*(traceFTF-3.0) - std::log(Je))
-                    + 0.5 * lambda_p * std::pow(std::log(Je), 2);
+    return mu_p * (0.5*(traceFTF-3.0) - log(Je))
+                    + 0.5 * lambda_p * pow(log(Je), 2);
 }
 
-__host__ __device__
+__device__
 const Eigen::Matrix3d MaterialPoint3D::fixedCorotatedEnergyDerivativeTimesDeformationGradientTranspose() const {
     double mu_p, lambda_p;
     thrust::tie(mu_p, lambda_p) = plasticLame();
 
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(deformation_gradient_elastic, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Matrix3d U = svd.matrixU();
-    Eigen::Matrix3d VT = svd.matrixV().transpose();
-    Eigen::Matrix3d R = U*VT;
+    Eigen::Matrix3f u, v;
+    Eigen::Vector3f s;
+    Eigen::Matrix3f Fe = deformation_gradient_elastic.cast<float>();
+    svd3x3(Fe, u, s, v);
+    Eigen::Matrix3d R = (u*v.transpose()).cast<double>();
     double Je = deformation_gradient_elastic.determinant();
 
     /* Fixed Corotated Model */
@@ -132,12 +134,23 @@ const Eigen::Matrix3d MaterialPoint3D::fixedCorotatedEnergyDerivativeTimesDeform
            + lambda_p*(Je-1.0)*Je*Eigen::Matrix3d::Identity();
 }
 
-__host__ __device__
-const Eigen::Matrix3d MaterialPoint3D::NeoHookeanEnergyEnergyDerivativeTimesDeformationGradientTranspose() const {
+__device__
+const Eigen::Matrix3d MaterialPoint3D::NeoHookeanEnergyEnergyDerivativeTimesDeformationGradientTranspose() {
     double mu_p, lambda_p;
     thrust::tie(mu_p, lambda_p) = plasticLame();
 
-    double Je = deformation_gradient_elastic.determinant();
+    // Project the deformation gradient so that the determinant > 0
+    Eigen::Matrix3f u, v;
+    Eigen::Vector3f s;
+    Eigen::Matrix3f Fe = deformation_gradient_elastic.cast<float>();
+    svd3x3(Fe, u, s, v);
+    Eigen::Vector3d sig_vals = s.cast<double>();
+    sig_vals = sig_vals.array().max(std::numeric_limits<double>::epsilon());
+    Eigen::Matrix3d U = u.cast<double>(), V = v.cast<double>(), S; S.setZero();
+    for (int i = 0; i < 3; i ++) S(i,i) = sig_vals(i);
+    deformation_gradient_elastic = U * S * V.transpose();
+    double Je = deformation_gradient_elastic.determinant(); 
+
     Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
 
     /* Neo-Hookean Model */
@@ -147,13 +160,13 @@ const Eigen::Matrix3d MaterialPoint3D::NeoHookeanEnergyEnergyDerivativeTimesDefo
     //      \mu_P (F_E - F_E^{-T}) F_E^T  + \lambda_P \log(J_E) F_E^{-T} F_E^T
     //      \mu_P (F_E F_E^T - I)  + \lambda_P \log(J_E) I
     return mu_p * (deformation_gradient_elastic*deformation_gradient_elastic.transpose()-I)
-           + lambda_p * std::log(Je) * I;
+           + lambda_p * log(Je) * I;
 }
 
-__host__ __device__
+__device__
 const thrust::pair<double, double> MaterialPoint3D::plasticLame() const {
     double Jp = deformation_gradient_plastic.determinant();
-    double decayingFactor = std::exp(hardening_coefficient * (1.0 - Jp));
+    double decayingFactor = exp(hardening_coefficient * (1.0 - Jp));
     return thrust::make_pair(mu0 * decayingFactor, lambda0 * decayingFactor);
 }
 

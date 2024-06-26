@@ -23,4 +23,20 @@ __device__ double atomicAdd(double* address, double val) {
 }
 #endif
 
+#define CUDA_CHECK(call) { \
+    cudaError_t err = (call); \
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
+        exit(EXIT_FAILURE); \
+    } \
+}
+
+#define CUDA_CHECK_LAST_ERROR() { \
+    cudaError_t err = cudaGetLastError(); \
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
+        exit(EXIT_FAILURE); \
+    } \
+}
+
 #endif  // CHAINS_CUDA_UTILS_H_

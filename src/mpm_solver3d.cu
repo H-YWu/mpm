@@ -8,9 +8,28 @@
 #include <thrust/for_each.h>
 #include <thrust/functional.h>
 #include <thrust/execution_policy.h>
-#include <fstream>
+#include <thrust/tabulate.h>
+#include <iostream>
+#include <limits>
 
 namespace chains {
+
+struct InstantiateCollocatedGridData3DWithIndex {
+    Eigen::Vector3i resolution;
+
+    InstantiateCollocatedGridData3DWithIndex(Eigen::Vector3i gridResolution) : resolution(gridResolution) {}
+
+    __host__ __device__
+    CollocatedGridData3D operator()(const int& idx) {
+        return CollocatedGridData3D(
+            Eigen::Vector3i(
+                idx % resolution(0),
+                ((idx / resolution(0)) % resolution(1)),
+                ((idx / resolution(0)) / resolution(1))
+            )
+        );
+    }
+};
 
 MPMSolver3D::MPMSolver3D(
     const thrust::host_vector<MaterialPoint3D> &particles,
@@ -19,70 +38,76 @@ MPMSolver3D::MPMSolver3D(
     double gridStride,
     double gridBoundaryFrictionCoefficient,
     double blendCoefficient,
-    InterpolationType interpolationType
-) : _blend_coefficient(blendCoefficient)
+    InterpolationType interpolationType,
+    double deltaTime
+) : _blend_coefficient(blendCoefficient), _delta_time(deltaTime)
 {
+    std::cout << "[INFO] copying particles to device" << std::endl;
     // Build particles
     _particles.resize(particles.size());
     thrust::copy(particles.begin(), particles.end(), _particles.begin());
+    CUDA_CHECK_LAST_ERROR();
 
     // Build GridSettings
     Grid3DSettings* grid_settings;
     grid_settings = (Grid3DSettings*)malloc(sizeof(Grid3DSettings));
-    cudaMalloc((void**) &_grid_settings, sizeof(Grid3DSettings));
     *grid_settings= Grid3DSettings(
         gridOrigin,
         gridResolution,
         gridStride,
         gridBoundaryFrictionCoefficient
     );
-    cudaMemcpy(_grid_settings, grid_settings, sizeof(Grid3DSettings), cudaMemcpyHostToDevice );
+    //  --copy to device--
+    CUDA_CHECK(cudaMalloc((void**) &_grid_settings, sizeof(Grid3DSettings)));
+    CUDA_CHECK(cudaMemcpy(_grid_settings, grid_settings, sizeof(Grid3DSettings), cudaMemcpyHostToDevice));
+    //  --free host--
     free(grid_settings);
 
     // Build interpolator
     Interpolator3D* interpolator;
     interpolator = (Interpolator3D*)malloc(sizeof(Interpolator3D));
-    cudaMalloc((void**) &_interpolator, sizeof(Interpolator3D));
     *interpolator = Interpolator3D(interpolationType);
-    cudaMemcpy(_interpolator, interpolator, sizeof(Interpolator3D), cudaMemcpyHostToDevice );
+    //  --copy to device--
+    CUDA_CHECK(cudaMalloc((void**) &_interpolator, sizeof(Interpolator3D)));
+    CUDA_CHECK(cudaMemcpy(_interpolator, interpolator, sizeof(Interpolator3D), cudaMemcpyHostToDevice));
+    //  --free host--
     free(interpolator);
 
+    std::cout << "[INFO] building grid of "
+              << gridResolution(0) << " x " << gridResolution(1) << " x " << gridResolution(2)
+              << " on device" << std::endl;
     // Build grid
     int grid_size = gridResolution(0)*gridResolution(1)*gridResolution(2);
-    _host_grid.resize(grid_size);
-    for (int i = 0; i < grid_size; ++i) {
-        _host_grid[i] = CollocatedGridData3D(
-            Eigen::Vector3i(
-                i % gridResolution(0),
-                ((i / gridResolution(0)) % gridResolution(1)),
-                ((i / gridResolution(0)) / gridResolution(1))
-            )
-        );
-    }
-    _grid.resize(_host_grid.size());
-    thrust::copy(_host_grid.begin(), _host_grid.end(), _grid.begin());
+    _grid.resize(grid_size);
+    thrust::tabulate(
+        thrust::device,
+        _grid.begin(),
+        _grid.end(),
+        InstantiateCollocatedGridData3DWithIndex(gridResolution)
+    );
+    CUDA_CHECK_LAST_ERROR();
 
     _enable_particles_collision = false;
 
+    std::cout << "[INFO] initialization particle initial volume" << std::endl;
     // IMPORTANT: Compute the initialize volume of each particle
     initialize();
-
 }
 
 MPMSolver3D::~MPMSolver3D() {
-    free(_grid_settings);
-    free(_interpolator);
+    CUDA_CHECK(cudaFree(_grid_settings));
+    CUDA_CHECK(cudaFree(_interpolator));
 }
 
 void MPMSolver3D::simulateOneStep() {
-    double dt = 1e-4;    // TODO: CFL
+    double dt = _delta_time;    // TODO: CFL
 
     // New grid for this step
     resetGrid();
 
     // PIC: Transfer mass, velocity and elastic force
     //  NOTICE: this includes computing explicit grid forces
-    particlesToGrid(); 
+    particlesToGrid();
 
     computeExternalForces();
 
@@ -94,8 +119,9 @@ void MPMSolver3D::simulateOneStep() {
     //  NOTICE: this includes updating paticles' deformation gradient 
     gridToParticles(dt, _blend_coefficient);
 
-    if (_enable_particles_collision)
+    if (_enable_particles_collision) {
         particlesCollision(dt);
+    }
  
     advectParticles(dt);
 }
@@ -191,11 +217,11 @@ void MPMSolver3D::initialize() {
 
     // Transfer mass from particles to grid
     thrust::for_each(thrust::device, _particles.begin(), _particles.end(), P2GMass);
-
-    cudaDeviceSynchronize();
+    CUDA_CHECK_LAST_ERROR();
 
     // Compute particle volumes and densities back
     thrust::for_each(thrust::device, _particles.begin(), _particles.end(), G2PVolume);
+    CUDA_CHECK_LAST_ERROR();
 }
 
 void MPMSolver3D::resetGrid() {
@@ -229,7 +255,7 @@ void MPMSolver3D::particlesToGrid() {
             index_u[i] = floor(mp_pos(i)/h + rng);
         }
 
-        Eigen::Matrix3d vol_stress = -1.0 * mp.volumeTimesCauchyStress();
+        Eigen::Matrix3d vol_stress = -mp.volumeTimesCauchyStress();
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
@@ -327,7 +353,7 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
                     // PIC-FLIP
                     CollocatedGridData3D grid_data = grid_ptr[gd_index];
                     vel_pic = grid_data.velocity_star * w;
-                    vel_flip = (grid_data.velocity_star-grid_data.velocity) * w;
+                    vel_flip += (grid_data.velocity_star-grid_data.velocity) * w;
                     vel_grad += grid_data.velocity_star * gradw.transpose();
                 }
             }
@@ -364,7 +390,9 @@ void MPMSolver3D::advectParticles(double deltaTimeInSeconds) {
 
 void MPMSolver3D::computeGravityForces() {
     auto addGravityForce = [=] __device__ (CollocatedGridData3D& gd) {
-        gd.force(1) -= 9.80665; // m/s^2
+        if (gd.mass > std::numeric_limits<double>::epsilon()) {
+            gd.force(1) -= 9.80665; // m/s^2
+        }
     };
 
     thrust::for_each(thrust::device, _grid.begin(), _grid.end(), addGravityForce);
@@ -385,7 +413,7 @@ void MPMSolver3D::gridCollision(double deltaTimeInSeconds) {
             double coeff = grid_settings_ptr->boundary_friction_coefficient;
             gd.velocity_star = applyBoundaryCollision(
                 // "Distorted" position of this grid point
-                (ori + gd.index.cast<double>()*h) + (deltaTimeInSeconds*gd.velocity_star),
+                (ori + h*gd.index.cast<double>()) + (deltaTimeInSeconds*gd.velocity_star),
                 gd.velocity_star, ori, tar, coeff
             );
         }
@@ -404,47 +432,77 @@ void MPMSolver3D::particlesCollision(double deltaTimeInSeconds) {
             double coeff = grid_settings_ptr->boundary_friction_coefficient;
             mp.velocity = applyBoundaryCollision(
                 mp.position + deltaTimeInSeconds*mp.velocity,
-                mp.velocity, ori, tar, coeff 
+                mp.velocity, ori, tar, coeff
             );
         }
     );
 }
 
-
 void MPMSolver3D::registerGLBufferWithCUDA(const GLuint buffer) {
     // Enable CUDA to directly map and access the buffer
-    cudaError_t ret;
-    ret = cudaGraphicsGLRegisterBuffer(&vbo_resource, buffer, cudaGraphicsMapFlagsWriteDiscard);
-    assert(ret == cudaSuccess);
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&_cuda_vbo_resource, buffer, cudaGraphicsMapFlagsWriteDiscard));
+}
+
+void MPMSolver3D::saveGLBuffer(const GLuint buffer) {
+    // Storing the OpenGL buffer ID for future use
+    _vbo_buffer = buffer;
 }
 
 void MPMSolver3D::updateGLBufferWithCUDA() {
-    cudaError_t ret;
-    float4 *bufptr;
-    size_t size;
+    float4* buf_ptr;
+    size_t buf_size;
 
-    ret = cudaGraphicsMapResources(1, &vbo_resource, nullptr);
-    assert(ret == cudaSuccess);
+    CUDA_CHECK(cudaGraphicsMapResources(1, &_cuda_vbo_resource, nullptr));
 
-    ret = cudaGraphicsResourceGetMappedPointer((void **)&bufptr, &size, vbo_resource);
-    assert(ret == cudaSuccess);
+    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&buf_ptr, &buf_size, _cuda_vbo_resource));
 
-    assert(bufptr != nullptr && size >= _particles.size() * sizeof(float4));
+    assert(buf_ptr != nullptr && buf_size >= _particles.size() * sizeof(float4));
     thrust::transform(
         thrust::device,
         _particles.begin(),
         _particles.end(),
-        bufptr,
+        buf_ptr,
         [=] __device__ (MaterialPoint3D& mp) -> float4 {
-            return make_float4(5.0 * mp.position(0) - 2.5, 5.0 * mp.position(1), 5.0 * mp.position(2) - 2.5, 1.0);
+            return make_float4(
+                mp.position(0),
+                mp.position(1),
+                mp.position(2), 
+                1.0
+            );
         }
     );
 
-    ret = cudaGraphicsUnmapResources(1, &vbo_resource, nullptr);
-    assert(ret == cudaSuccess);
+    CUDA_CHECK(cudaGraphicsUnmapResources(1, &_cuda_vbo_resource, nullptr));
+}
+
+void MPMSolver3D::updateGLBufferByCPU() {
+    // Map OpenGL buffer for writing
+    glBindBuffer(GL_ARRAY_BUFFER, _vbo_buffer);
+    float4 *buf_ptr = (float4*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+    GLint buf_size;
+    glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &buf_size);
+    
+    assert(buf_ptr != nullptr && buf_size >= _particles.size() * sizeof(float4));
+    // Copy data from _particles to host particles 
+    std::vector<MaterialPoint3D> h_particles(_particles.size());
+    thrust::copy(_particles.begin(), _particles.end(), h_particles.begin());
+    // Transform and copy data from h_particles to buf_ptr (OpenGL buffer)
+    for (size_t i = 0; i < h_particles.size(); i ++) {
+        const MaterialPoint3D& mp = h_particles[i];
+        buf_ptr[i] = make_float4(
+            mp.position(0),
+            mp.position(1),
+            mp.position(2),
+            1.0f
+        );
+    }
+
+    // Unmap OpenGL buffer
+    glUnmapBuffer(GL_ARRAY_BUFFER);
 }
 
 void MPMSolver3D::writeToFile(std::string filePath) {
+
 }
 
 }   // namespace chains

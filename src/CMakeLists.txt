@@ -1,14 +1,27 @@
 set(LIB_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(INC_DIR ${CMAKE_SOURCE_DIR}/include)
+set(EXT_INC_DIR ${CMAKE_SOURCE_DIR}/external)
 set(BIN_DIR ${CMAKE_BINARY_DIR})
 # Source code for building libraries
 file(GLOB LIB_CPP_SRCS ${LIB_SRC_DIR}/*.cpp)
 file(GLOB LIB_CUDA_SRCS ${LIB_SRC_DIR}/*.cu)
 
 # Interface library: compiler flags
+set(IMGUI_SRC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+)
+add_library(imgui_lib ${IMGUI_SRC})
+# ImGui headers
+target_include_directories(imgui_lib PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends/)
 ## Target: external libraries
 add_library(external_libs INTERFACE)
-target_link_libraries(external_libs INTERFACE CUDA::cudart CUDA::cuda_driver glfw glad Eigen3::Eigen yaml-cpp glm::glm)
+target_link_libraries(external_libs INTERFACE CUDA::cudart CUDA::cuda_driver cudadevrt glfw glad Eigen3::Eigen yaml-cpp glm::glm imgui_lib)
 ## Target: general compiler flags
 add_library(compiler_flags INTERFACE)
 target_compile_features(compiler_flags INTERFACE cxx_std_17)
@@ -56,7 +69,7 @@ target_link_libraries(compiler_flags INTERFACE
 set(LIB_CMPM_NAME cmpm)
 add_library(${LIB_CMPM_NAME} STATIC ${LIB_CUDA_SRCS} ${LIB_CPP_SRCS})
 target_link_libraries(${LIB_CMPM_NAME} PUBLIC compiler_flags external_libs)
-target_include_directories(${LIB_CMPM_NAME} PUBLIC ${INC_DIR} ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+target_include_directories(${LIB_CMPM_NAME} PUBLIC ${INC_DIR} ${EXT_INC_DIR} ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 # Enable relocatable device code mode
 set_target_properties(${LIB_CMPM_NAME} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 

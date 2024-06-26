@@ -27,6 +27,8 @@ struct MPM3DConfiguration {
     double blend_coeff;
     // Interpolation
     InterpolationType interp_type;
+    // Simulate
+    double delta_time;
     // Render
     bool offline;
     std::string particle_frag_shader_path;

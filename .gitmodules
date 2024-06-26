@@ -1,0 +1,3 @@
+[submodule "external/3x3_SVD_CUDA"]
+	path = external/3x3_SVD_CUDA
+	url = git@github.com:H-YWu/3x3_SVD_CUDA.git
