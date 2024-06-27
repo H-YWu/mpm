@@ -7,17 +7,17 @@
 namespace chains {
 
 struct Grid3DSettings {
-    Eigen::Vector3d origin, target; // target is the farthest point from origin
+    Eigen::Vector3f origin, target; // target is the farthest point from origin
     Eigen::Vector3i resolution;
-    double stride;
-    double boundary_friction_coefficient;
+    float stride;
+    float boundary_friction_coefficient;
 
     __host__ __device__
     Grid3DSettings(
-        Eigen::Vector3d gridOrigin,
+        Eigen::Vector3f gridOrigin,
         Eigen::Vector3i gridResolution,
-        double gridStride,
-        double gridBoundaryFrictionCoefficient
+        float gridStride,
+        float gridBoundaryFrictionCoefficient
     );
 
     __host__ __device__
@@ -26,9 +26,9 @@ struct Grid3DSettings {
 
 struct CollocatedGridData3D {
     Eigen::Vector3i index;
-    Eigen::Vector3d force;
-    Eigen::Vector3d velocity, velocity_star;
-    double mass;
+    Eigen::Vector3f force;
+    Eigen::Vector3f velocity, velocity_star;
+    float mass;
 
     __host__ __device__
     CollocatedGridData3D() { }
@@ -43,7 +43,7 @@ struct CollocatedGridData3D {
 
     // Explicit integration
     __host__ __device__
-    void updateVelocity(double deltaTimeInSeconds);
+    void updateVelocity(float deltaTimeInSeconds);
 };
 
 } // namespace chains

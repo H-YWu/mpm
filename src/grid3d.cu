@@ -6,13 +6,13 @@ namespace chains {
 
 __host__ __device__
 Grid3DSettings::Grid3DSettings(
-    Eigen::Vector3d gridOrigin,
+    Eigen::Vector3f gridOrigin,
     Eigen::Vector3i gridResolution,
-    double gridStride,
-    double gridBoundaryFrictionCoefficient
+    float gridStride,
+    float gridBoundaryFrictionCoefficient
 ) : origin(gridOrigin), resolution(gridResolution),
     stride(gridStride), boundary_friction_coefficient(gridBoundaryFrictionCoefficient) {
-    target = origin + resolution.cast<double>()*stride;
+    target = origin + stride*resolution.cast<float>();
 }
 
 
@@ -33,8 +33,8 @@ void CollocatedGridData3D::reset() {
 }
 
 __host__ __device__
-void CollocatedGridData3D::updateVelocity(double deltaTimeInSeconds) {
-    if (mass > std::numeric_limits<double>::epsilon()) {
+void CollocatedGridData3D::updateVelocity(float deltaTimeInSeconds) {
+    if (mass > std::numeric_limits<float>::epsilon()) {
         velocity /= mass;   // IMPORTANT: normalized weights for velocity here since we did not do this in transfer
         velocity_star = velocity + deltaTimeInSeconds * force / mass;
     }

@@ -13,12 +13,12 @@ enum class ConstitutiveModel {
 }; 
 
 struct MaterialPoint3D {
-    double volume0, mass;
-    Eigen::Vector3d position, velocity;
-    Eigen::Matrix3d deformation_gradient_elastic, deformation_gradient_plastic;
-    double mu0, lambda0;    // Initial Lame coefficients
-    double hardening_coefficient;
-    double critical_compression, critical_stretch;
+    float volume0, mass;
+    Eigen::Vector3f position, velocity;
+    Eigen::Matrix3f deformation_gradient_elastic, deformation_gradient_plastic;
+    float mu0, lambda0;    // Initial Lame coefficients
+    float hardening_coefficient;
+    float critical_compression, critical_stretch;
     ConstitutiveModel constitutive_model;
 
     __host__ __device__
@@ -26,14 +26,14 @@ struct MaterialPoint3D {
 
     __host__ __device__
     MaterialPoint3D(
-        Eigen::Vector3d particlePosition,
-        Eigen::Vector3d particleVelocity,
-        double particleMass,
-        double hardeningCoefficient,
-        double YoungModulus,
-        double PoissonRatio,
-        double criticalCompression,
-        double criticleStretch,
+        Eigen::Vector3f particlePosition,
+        Eigen::Vector3f particleVelocity,
+        float particleMass,
+        float hardeningCoefficient,
+        float YoungModulus,
+        float PoissonRatio,
+        float criticalCompression,
+        float criticleStretch,
         ConstitutiveModel constitutiveModel
     );
 
@@ -41,13 +41,13 @@ struct MaterialPoint3D {
     ~MaterialPoint3D() { }
 
     __device__
-    const Eigen::Matrix3d volumeTimesCauchyStress();
+    const Eigen::Matrix3f volumeTimesCauchyStress();
 
     __device__
-    void updatePosition(double deltaTimeInSeconds);
+    void updatePosition(float deltaTimeInSeconds);
 
     __device__
-    void updateDeformationGradient(Eigen::Matrix3d velocityGradient, double deltaTimeInSeconds);
+    void updateDeformationGradient(Eigen::Matrix3f velocityGradient, float deltaTimeInSeconds);
 
     // Constitutive models 
     // Hyperelasticity
@@ -55,21 +55,21 @@ struct MaterialPoint3D {
     // Energy:
 
     __device__
-    double fixedCorotatedEnergy() const;
+    float fixedCorotatedEnergy() const;
     __device__
-    double NeoHookeanEnergy() const;
+    float NeoHookeanEnergy() const;
 
     // Stress:
     //  Piola-Kirchhoff Stress x F^T
 
     __device__
-    const Eigen::Matrix3d fixedCorotatedEnergyDerivativeTimesDeformationGradientTranspose() const;
+    const Eigen::Matrix3f fixedCorotatedEnergyDerivativeTimesDeformationGradientTranspose() const;
     __device__
-    const Eigen::Matrix3d NeoHookeanEnergyEnergyDerivativeTimesDeformationGradientTranspose();
+    const Eigen::Matrix3f NeoHookeanEnergyEnergyDerivativeTimesDeformationGradientTranspose();
 
     // Finite-strain multiplicative plasticity law 
     __device__
-    const thrust::pair<double, double> plasticLame() const;
+    const thrust::pair<float, float> plasticLame() const;
 };
 
 }   // namespace chains

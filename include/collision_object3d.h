@@ -12,12 +12,12 @@ struct LevelSetCollisionObject3D
 };
 
 __host__ __device__
-Eigen::Vector3d applyBoundaryCollision(
-    const Eigen::Vector3d& position,
-    const Eigen::Vector3d& velocity,
-    Eigen::Vector3d grid000,
-    Eigen::Vector3d grid111,
-    double gridBoundaryFrictionCoefficient
+Eigen::Vector3f applyBoundaryCollision(
+    const Eigen::Vector3f& position,
+    const Eigen::Vector3f& velocity,
+    Eigen::Vector3f grid000,
+    Eigen::Vector3f grid111,
+    float gridBoundaryFrictionCoefficient
 );
 
 }   // namespace chains

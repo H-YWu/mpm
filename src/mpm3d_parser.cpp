@@ -26,42 +26,42 @@ MPM3DConfiguration parseYAML(const std::string& filePath) {
     // Parse ParticleGroups
     for (const auto& group : config_yaml_node["ParticleGroups"]) {
         mpm_config.group_paths.push_back(group["File"].as<std::string>());
-        mpm_config.masses.push_back(group["Mass"].as<double>());
-        mpm_config.velocities.push_back(Eigen::Vector3d(
-            group["Velocity"][0].as<double>(),
-            group["Velocity"][1].as<double>(),
-            group["Velocity"][2].as<double>()
+        mpm_config.masses.push_back(group["Mass"].as<float>());
+        mpm_config.velocities.push_back(Eigen::Vector3f(
+            group["Velocity"][0].as<float>(),
+            group["Velocity"][1].as<float>(),
+            group["Velocity"][2].as<float>()
         ));
-        mpm_config.youngs.push_back(group["YoungModulus"].as<double>());
-        mpm_config.poissons.push_back(group["PoissonRatio"].as<double>());
-        mpm_config.hardenings.push_back(group["HardeningCoefficient"].as<double>());
-        mpm_config.compressions.push_back(group["CriticalCompression"].as<double>());
-        mpm_config.stretches.push_back(group["CriticalStretch"].as<double>());
+        mpm_config.youngs.push_back(group["YoungModulus"].as<float>());
+        mpm_config.poissons.push_back(group["PoissonRatio"].as<float>());
+        mpm_config.hardenings.push_back(group["HardeningCoefficient"].as<float>());
+        mpm_config.compressions.push_back(group["CriticalCompression"].as<float>());
+        mpm_config.stretches.push_back(group["CriticalStretch"].as<float>());
         mpm_config.constitutive_models.push_back(parseConstitutiveModel(group["ConstitutiveModel"].as<std::string>()));
     }
 
     // Parse Grid
-    mpm_config.origin = Eigen::Vector3d(
-        config_yaml_node["Grid"]["Origin"][0].as<double>(),
-        config_yaml_node["Grid"]["Origin"][1].as<double>(),
-        config_yaml_node["Grid"]["Origin"][2].as<double>()
+    mpm_config.origin = Eigen::Vector3f(
+        config_yaml_node["Grid"]["Origin"][0].as<float>(),
+        config_yaml_node["Grid"]["Origin"][1].as<float>(),
+        config_yaml_node["Grid"]["Origin"][2].as<float>()
     );
     mpm_config.resolution = Eigen::Vector3i(
         config_yaml_node["Grid"]["Resolution"][0].as<int>(),
         config_yaml_node["Grid"]["Resolution"][1].as<int>(),
         config_yaml_node["Grid"]["Resolution"][2].as<int>()
     );
-    mpm_config.stride = config_yaml_node["Grid"]["Stride"].as<double>();
-    mpm_config.friction_coeff = config_yaml_node["Grid"]["BoundaryFrictionCoefficient"].as<double>();
+    mpm_config.stride = config_yaml_node["Grid"]["Stride"].as<float>();
+    mpm_config.friction_coeff = config_yaml_node["Grid"]["BoundaryFrictionCoefficient"].as<float>();
 
     // Parse Transfer
-    mpm_config.blend_coeff = config_yaml_node["Transfer"]["BlendCoefficient"].as<double>();
+    mpm_config.blend_coeff = config_yaml_node["Transfer"]["BlendCoefficient"].as<float>();
 
     // Parse Interpolation
     mpm_config.interp_type = parseInterpolationType(config_yaml_node["Interpolation"]["Type"].as<std::string>());
 
     // Parse Simulate
-    mpm_config.delta_time = config_yaml_node["Simulate"]["deltaTime"].as<double>();
+    mpm_config.delta_time = config_yaml_node["Simulate"]["deltaTime"].as<float>();
 
     // Parse Render 
     mpm_config.offline = config_yaml_node["Render"]["Offline"].as<bool>();

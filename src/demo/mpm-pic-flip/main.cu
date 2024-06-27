@@ -137,7 +137,7 @@ int main(int argc, const char *argv[]) {
         run_on_WSL = false;
     }
 
-    Eigen::Vector3f grid_origin = config.origin.cast<float>();
+    Eigen::Vector3f grid_origin = config.origin;
     float grid_stride = static_cast<float>(config.stride);
     Eigen::Vector3f grid_target = grid_origin + grid_stride*config.resolution.cast<float>();
 

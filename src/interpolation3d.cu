@@ -11,10 +11,10 @@ Interpolator3D::Interpolator3D(InterpolationType interpolationType)
 }
 
 __host__ __device__
-double Interpolator3D::weight3D(Eigen::Vector3d particlePosition, Eigen::Vector3d gridPosition, double stride) const {
-    double x = (particlePosition[0] - gridPosition[0]) / stride;
-    double y = (particlePosition[1] - gridPosition[1]) / stride;
-    double z = (particlePosition[2] - gridPosition[2]) / stride;
+float Interpolator3D::weight3D(Eigen::Vector3f particlePosition, Eigen::Vector3f gridPosition, float stride) const {
+    float x = (particlePosition[0] - gridPosition[0]) / stride;
+    float y = (particlePosition[1] - gridPosition[1]) / stride;
+    float z = (particlePosition[2] - gridPosition[2]) / stride;
     switch (_type)
     {
     case InterpolationType::LINEAR:
@@ -33,13 +33,13 @@ double Interpolator3D::weight3D(Eigen::Vector3d particlePosition, Eigen::Vector3
 }
 
 __host__ __device__
-const Eigen::Vector3d Interpolator3D::weightGradient3D(Eigen::Vector3d particlePosition, Eigen::Vector3d gridPosition, double stride) const {
-    double x = (particlePosition[0] - gridPosition[0]) / stride;
-    double y = (particlePosition[1] - gridPosition[1]) / stride;
-    double z = (particlePosition[2] - gridPosition[2]) / stride;
-    double grad_Nx = 0.0;
-    double grad_Ny = 0.0;
-    double grad_Nz = 0.0;
+const Eigen::Vector3f Interpolator3D::weightGradient3D(Eigen::Vector3f particlePosition, Eigen::Vector3f gridPosition, float stride) const {
+    float x = (particlePosition[0] - gridPosition[0]) / stride;
+    float y = (particlePosition[1] - gridPosition[1]) / stride;
+    float z = (particlePosition[2] - gridPosition[2]) / stride;
+    float grad_Nx = 0.0;
+    float grad_Ny = 0.0;
+    float grad_Nz = 0.0;
     switch (_type)
     {
     case InterpolationType::LINEAR:
@@ -61,7 +61,7 @@ const Eigen::Vector3d Interpolator3D::weightGradient3D(Eigen::Vector3d particleP
         grad_Nz = (cubicBSplineN3D(x) * cubicBSplineN3D(y) * cubicBSplineNDot3D(z)) / stride;
         break;
     }
-    return Eigen::Vector3d(grad_Nx, grad_Ny, grad_Nz);
+    return Eigen::Vector3f(grad_Nx, grad_Ny, grad_Nz);
 
 }
 
@@ -85,25 +85,25 @@ void Interpolator3D::setRange() {
 }
 
 __host__ __device__
-double Interpolator3D::linearN3D(double x) const {
-    double xabs = abs(x);
+float Interpolator3D::linearN3D(float x) const {
+    float xabs = abs(x);
     if (xabs < 1.0) {   // Absolute value is always >= 0.0
         return 1.0 - xabs;
     } else return 0.0;
 }
 
 __host__ __device__
-double Interpolator3D::linearNDot3D(double x) const {
-    double xabs = abs(x);
-    if (xabs < 1.0 && xabs > std::numeric_limits<double>::epsilon()) {   // Absolute value is always >= 0.0 
+float Interpolator3D::linearNDot3D(float x) const {
+    float xabs = abs(x);
+    if (xabs < 1.0 && xabs > std::numeric_limits<float>::epsilon()) {   // Absolute value is always >= 0.0 
         // Avoid undefined derivative
         return -x/xabs; 
     } else return 0.0;
 }
 
 __host__ __device__
-double Interpolator3D::quadraticBSplineN3D(double x) const {
-    double xabs = abs(x);
+float Interpolator3D::quadraticBSplineN3D(float x) const {
+    float xabs = abs(x);
     if (xabs < 0.5) {   // Absolute value is always >= 0.0
         return 0.75 - xabs*xabs;
     } else if (xabs < 1.5) {
@@ -112,8 +112,8 @@ double Interpolator3D::quadraticBSplineN3D(double x) const {
 }
 
 __host__ __device__
-double Interpolator3D::quadraticBSplineNDot3D(double x) const {
-    double xabs = abs(x);
+float Interpolator3D::quadraticBSplineNDot3D(float x) const {
+    float xabs = abs(x);
     if (xabs < 0.5) {   // Absolute value is always >= 0.0 
         return - 2.0*x; 
     } else if (xabs < 1.5) {
@@ -122,8 +122,8 @@ double Interpolator3D::quadraticBSplineNDot3D(double x) const {
 }
 
 __host__ __device__
-double Interpolator3D::cubicBSplineN3D(double x) const {
-    double xabs = abs(x);
+float Interpolator3D::cubicBSplineN3D(float x) const {
+    float xabs = abs(x);
     if (xabs < 1.0) {   // Absolute value is always >= 0.0
         return 0.5*pow(xabs, 3) - xabs*xabs + 2.0/3.0;
     } else if (xabs < 2.0) {
@@ -132,8 +132,8 @@ double Interpolator3D::cubicBSplineN3D(double x) const {
 }
 
 __host__ __device__
-double Interpolator3D::cubicBSplineNDot3D(double x) const {
-    double xabs = abs(x);
+float Interpolator3D::cubicBSplineNDot3D(float x) const {
+    float xabs = abs(x);
     if (xabs < 1.0) {   // Absolute value is always >= 0.0 
         return 1.5*x*xabs - 2.0*x; 
     } else if (xabs < 2.0) {

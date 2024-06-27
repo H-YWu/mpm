@@ -5,15 +5,15 @@
 namespace chains {
 
 __host__ __device__
-Eigen::Vector3d applyBoundaryCollision(
-    const Eigen::Vector3d& position,
-    const Eigen::Vector3d& velocity,
-    Eigen::Vector3d grid000,
-    Eigen::Vector3d grid111,
-    double gridBoundaryFrictionCoefficient
+Eigen::Vector3f applyBoundaryCollision(
+    const Eigen::Vector3f& position,
+    const Eigen::Vector3f& velocity,
+    Eigen::Vector3f grid000,
+    Eigen::Vector3f grid111,
+    float gridBoundaryFrictionCoefficient
 ) {
-    double vn;
-    Eigen::Vector3d vel_t, normal,
+    float vn;
+    Eigen::Vector3f vel_t, normal,
         // Grid boundary is still,
         //  so the relative velocity is the same as the velocity
         updated_velocity(velocity),
@@ -24,11 +24,11 @@ Eigen::Vector3d applyBoundaryCollision(
 
     // Boundary of grid
     for (int i = 0; i < 3; i ++) {
-        if (position(i) <= grid000(i) + std::numeric_limits<double>::epsilon()) {
+        if (position(i) <= grid000(i) + std::numeric_limits<float>::epsilon()) {
             is_collided = true;
             normal(i) = 1.0;
         }
-        if (position(i) >= grid111(i) - std::numeric_limits<double>::epsilon()) {
+        if (position(i) >= grid111(i) - std::numeric_limits<float>::epsilon()) {
             is_collided = true;
             normal(i) = -1.0;
         }
@@ -38,9 +38,9 @@ Eigen::Vector3d applyBoundaryCollision(
         // Grid boundary is still,
         //  so the relative velocity is the same as the velocity
         vn = relative_velocity.dot(normal);
-        if (vn >= std::numeric_limits<double>::epsilon()) return updated_velocity; // Separating: no collision
+        if (vn >= std::numeric_limits<float>::epsilon()) return updated_velocity; // Separating: no collision
         vel_t = relative_velocity - vn*normal;
-        if (vel_t.norm() <= -gridBoundaryFrictionCoefficient*vn + std::numeric_limits<double>::epsilon()) {
+        if (vel_t.norm() <= -gridBoundaryFrictionCoefficient*vn + std::numeric_limits<float>::epsilon()) {
             // If a sticking impulse is required
             relative_velocity.setZero();
         } else {

@@ -35,13 +35,13 @@ struct InstantiateCollocatedGridData3DWithIndex {
 
 MPMSolver3D::MPMSolver3D(
     const thrust::host_vector<MaterialPoint3D> &particles,
-    Eigen::Vector3d gridOrigin,
+    Eigen::Vector3f gridOrigin,
     Eigen::Vector3i gridResolution,
-    double gridStride,
-    double gridBoundaryFrictionCoefficient,
-    double blendCoefficient,
+    float gridStride,
+    float gridBoundaryFrictionCoefficient,
+    float blendCoefficient,
     InterpolationType interpolationType,
-    double deltaTime
+    float deltaTime
 ) : _blend_coefficient(blendCoefficient), _delta_time(deltaTime)
 {
     std::cout << "[INFO] copying particles to device" << std::endl;
@@ -96,7 +96,7 @@ MPMSolver3D::~MPMSolver3D() {
 }
 
 void MPMSolver3D::simulateOneStep() {
-    double dt = _delta_time;    // TODO: CFL
+    float dt = _delta_time;    // TODO: CFL
 
     // New grid for this step
     resetGrid();
@@ -132,12 +132,12 @@ void MPMSolver3D::initialize() {
     Interpolator3D* interpolator_ptr = _interpolator; 
 
     auto P2GMass = [=] __device__ (MaterialPoint3D& mp) {
-        Eigen::Vector3d ori = grid_settings_ptr->origin;
+        Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
-        double h = grid_settings_ptr->stride;
-        double rng = interpolator_ptr->_range;
+        float h = grid_settings_ptr->stride;
+        float rng = interpolator_ptr->_range;
 
-        Eigen::Vector3d mp_pos = mp.position;
+        Eigen::Vector3f mp_pos = mp.position;
     
         // Grid vertex range inside the interpolation kernel
         int index_l[3], index_u[3];
@@ -155,13 +155,13 @@ void MPMSolver3D::initialize() {
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
-                    Eigen::Vector3d gd_pos = ori + h * Eigen::Vector3d(x, y, z);
+                    Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
-                    double w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
+                    float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
 
                     // PIC-FLIP
                     //  mass
-                    double m_ip = mp.mass * w;
+                    float m_ip = mp.mass * w;
                     atomicAdd(&(grid_ptr[gd_index].mass), m_ip);
                 }
             }
@@ -169,12 +169,12 @@ void MPMSolver3D::initialize() {
     };
 
     auto G2PVolume = [=] __device__ (MaterialPoint3D& mp) {
-        Eigen::Vector3d ori = grid_settings_ptr->origin;
+        Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
-        double h = grid_settings_ptr->stride;
-        double rng = interpolator_ptr->_range;
+        float h = grid_settings_ptr->stride;
+        float rng = interpolator_ptr->_range;
 
-        Eigen::Vector3d mp_pos = mp.position;
+        Eigen::Vector3f mp_pos = mp.position;
     
         // Grid vertex range inside the interpolation kernel
         int index_l[3], index_u[3];
@@ -183,8 +183,8 @@ void MPMSolver3D::initialize() {
             index_u[i] = floor(mp_pos(i)/h + rng);
         }
 
-        double mp_density = 0.0;
-        double inv_cell_vol = 1.0 / (h*h*h);
+        float mp_density = 0.0;
+        float inv_cell_vol = 1.0 / (h*h*h);
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
@@ -195,12 +195,12 @@ void MPMSolver3D::initialize() {
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
-                    Eigen::Vector3d gd_pos = ori + h * Eigen::Vector3d(x, y, z);
+                    Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
-                    double w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
+                    float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
 
                     // PIC-FLIP
-                    double m_ip = grid_ptr[gd_index].mass * w;
+                    float m_ip = grid_ptr[gd_index].mass * w;
                     //  accumulate density
                     mp_density += m_ip * inv_cell_vol;
                 }
@@ -237,12 +237,12 @@ void MPMSolver3D::particlesToGrid() {
     Interpolator3D* interpolator_ptr = _interpolator; 
 
     auto P2G = [=] __device__ (MaterialPoint3D& mp) {
-        Eigen::Vector3d ori = grid_settings_ptr->origin;
+        Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
-        double h = grid_settings_ptr->stride;
-        double rng = interpolator_ptr->_range;
+        float h = grid_settings_ptr->stride;
+        float rng = interpolator_ptr->_range;
 
-        Eigen::Vector3d mp_pos = mp.position;
+        Eigen::Vector3f mp_pos = mp.position;
     
         // Grid vertex range inside the interpolation kernel
         int index_l[3], index_u[3];
@@ -251,7 +251,7 @@ void MPMSolver3D::particlesToGrid() {
             index_u[i] = floor(mp_pos(i)/h + rng);
         }
 
-        Eigen::Matrix3d vol_stress = -mp.volumeTimesCauchyStress();
+        Eigen::Matrix3f vol_stress = -mp.volumeTimesCauchyStress();
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
@@ -262,14 +262,14 @@ void MPMSolver3D::particlesToGrid() {
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
-                    Eigen::Vector3d gd_pos = ori + h * Eigen::Vector3d(x, y, z);
+                    Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
-                    double w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
-                    Eigen::Vector3d gradw = interpolator_ptr->weightGradient3D(mp_pos, gd_pos, h);
+                    float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
+                    Eigen::Vector3f gradw = interpolator_ptr->weightGradient3D(mp_pos, gd_pos, h);
 
                     // PIC-FLIP
-                    double m_ip = mp.mass * w;
-                    Eigen::Vector3d f_ip = vol_stress * gradw;
+                    float m_ip = mp.mass * w;
+                    Eigen::Vector3f f_ip = vol_stress * gradw;
                     //  mass
                     atomicAdd(&(grid_ptr[gd_index].mass), m_ip);
                     //  velocity
@@ -293,7 +293,7 @@ void MPMSolver3D::computeExternalForces() {
     computeGravityForces();
 }
 
-void MPMSolver3D::updateGridVelocities(double deltaTimeInSeconds) {
+void MPMSolver3D::updateGridVelocities(float deltaTimeInSeconds) {
     thrust::for_each(
         thrust::device,
         _grid.begin(),
@@ -304,22 +304,22 @@ void MPMSolver3D::updateGridVelocities(double deltaTimeInSeconds) {
     );
 }
 
-void MPMSolver3D::solveLinearSystem(double deltaTimeInSeconds) {
+void MPMSolver3D::solveLinearSystem(float deltaTimeInSeconds) {
     // TODO
 }
 
-void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoefficient) {
+void MPMSolver3D::gridToParticles(float deltaTimeInSeconds, float blendCoefficient) {
     CollocatedGridData3D* grid_ptr = thrust::raw_pointer_cast(&_grid[0]);
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
     Interpolator3D* interpolator_ptr = _interpolator; 
 
-    auto computeVelocityAndItsGradient = [=] __device__ (MaterialPoint3D& mp) -> thrust::pair<Eigen::Vector3d, Eigen::Matrix3d> {
-        Eigen::Vector3d ori = grid_settings_ptr->origin;
+    auto computeVelocityAndItsGradient = [=] __device__ (MaterialPoint3D& mp) -> thrust::pair<Eigen::Vector3f, Eigen::Matrix3f> {
+        Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
-        double h = grid_settings_ptr->stride;
-        double rng = interpolator_ptr->_range;
+        float h = grid_settings_ptr->stride;
+        float rng = interpolator_ptr->_range;
 
-        Eigen::Vector3d mp_pos = mp.position;
+        Eigen::Vector3f mp_pos = mp.position;
     
         // Grid vertex range inside the interpolation kernel
         int index_l[3], index_u[3];
@@ -328,9 +328,9 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
             index_u[i] = floor(mp_pos(i)/h + rng);
         }
 
-        Eigen::Matrix3d vel_grad(Eigen::Matrix3d::Zero());
-        Eigen::Vector3d vel_pic(Eigen::Vector3d::Zero());
-        Eigen::Vector3d vel_flip(mp.velocity);
+        Eigen::Matrix3f vel_grad(Eigen::Matrix3f::Zero());
+        Eigen::Vector3f vel_pic(Eigen::Vector3f::Zero());
+        Eigen::Vector3f vel_flip(mp.velocity);
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
@@ -341,10 +341,10 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
-                    Eigen::Vector3d gd_pos = ori + h * Eigen::Vector3d(x, y, z);
+                    Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
-                    double w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
-                    Eigen::Vector3d gradw = interpolator_ptr->weightGradient3D(mp_pos, gd_pos, h);
+                    float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
+                    Eigen::Vector3f gradw = interpolator_ptr->weightGradient3D(mp_pos, gd_pos, h);
 
                     // PIC-FLIP
                     CollocatedGridData3D grid_data = grid_ptr[gd_index];
@@ -355,7 +355,7 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
             }
         }
 
-        Eigen::Vector3d vel = blendCoefficient*vel_flip + (1.0-blendCoefficient)*vel_pic;
+        Eigen::Vector3f vel = blendCoefficient*vel_flip + (1.0-blendCoefficient)*vel_pic;
 
         return thrust::make_pair(vel, vel_grad);
     };
@@ -372,7 +372,7 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
     );
 }
 
-void MPMSolver3D::advectParticles(double deltaTimeInSeconds) {
+void MPMSolver3D::advectParticles(float deltaTimeInSeconds) {
     thrust::for_each(
         thrust::device,
         _particles.begin(),
@@ -386,7 +386,7 @@ void MPMSolver3D::advectParticles(double deltaTimeInSeconds) {
 
 void MPMSolver3D::computeGravityForces() {
     auto addGravityForce = [=] __device__ (CollocatedGridData3D& gd) {
-        if (gd.mass > std::numeric_limits<double>::epsilon()) {
+        if (gd.mass > std::numeric_limits<float>::epsilon()) {
             gd.force(1) -= 9.80665 * gd.mass; // m/s^2
         }
     };
@@ -394,7 +394,7 @@ void MPMSolver3D::computeGravityForces() {
     thrust::for_each(thrust::device, _grid.begin(), _grid.end(), addGravityForce);
 }
 
-void MPMSolver3D::gridCollision(double deltaTimeInSeconds) {
+void MPMSolver3D::gridCollision(float deltaTimeInSeconds) {
     CollocatedGridData3D* grid_ptr = thrust::raw_pointer_cast(&_grid[0]);
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
 
@@ -403,29 +403,29 @@ void MPMSolver3D::gridCollision(double deltaTimeInSeconds) {
         _grid.begin(),
         _grid.end(),
         [=] __device__ (CollocatedGridData3D& gd) {
-            Eigen::Vector3d ori = grid_settings_ptr->origin;
-            Eigen::Vector3d tar = grid_settings_ptr->target;
-            double h = grid_settings_ptr->stride;
-            double coeff = grid_settings_ptr->boundary_friction_coefficient;
+            Eigen::Vector3f ori = grid_settings_ptr->origin;
+            Eigen::Vector3f tar = grid_settings_ptr->target;
+            float h = grid_settings_ptr->stride;
+            float coeff = grid_settings_ptr->boundary_friction_coefficient;
             gd.velocity_star = applyBoundaryCollision(
                 // "Distorted" position of this grid point
-                (ori + h*gd.index.cast<double>()) + (deltaTimeInSeconds*gd.velocity_star),
+                (ori + h*gd.index.cast<float>()) + (deltaTimeInSeconds*gd.velocity_star),
                 gd.velocity_star, ori, tar, coeff
             );
         }
     );
 }
 
-void MPMSolver3D::particlesCollision(double deltaTimeInSeconds) {
+void MPMSolver3D::particlesCollision(float deltaTimeInSeconds) {
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
     thrust::for_each(
         thrust::device,
         _particles.begin(),
         _particles.end(),
         [=] __device__ (MaterialPoint3D& mp) {
-            Eigen::Vector3d ori = grid_settings_ptr->origin;
-            Eigen::Vector3d tar = grid_settings_ptr->target;
-            double coeff = grid_settings_ptr->boundary_friction_coefficient;
+            Eigen::Vector3f ori = grid_settings_ptr->origin;
+            Eigen::Vector3f tar = grid_settings_ptr->target;
+            float coeff = grid_settings_ptr->boundary_friction_coefficient;
             mp.velocity = applyBoundaryCollision(
                 mp.position + deltaTimeInSeconds*mp.velocity,
                 mp.velocity, ori, tar, coeff
@@ -502,20 +502,20 @@ void MPMSolver3D::writeToOpenVDB(std::string filePath) {
     std::vector<MaterialPoint3D> h_particles(_particles.size());
     thrust::copy(_particles.begin(), _particles.end(), h_particles.begin());
 
-    // Create a OpenVDB DoubleGrid
-    // openvdb::DoubleGrid::Ptr grid = openvdb::DoubleGrid::create();
+    // Create a OpenVDB floatGrid
+    // openvdb::floatGrid::Ptr grid = openvdb::floatGrid::create();
 
     // Build OpenVDB grid
     // Rasterize particles to grid: density
     // for (auto &mp : h_particles) {
-    //     Eigen::Vector3d mp_pos = mp.position;
+    //     Eigen::Vector3f mp_pos = mp.position;
 
-    //     Eigen::Vector3d ori = _host_grid_settings->origin;
+    //     Eigen::Vector3f ori = _host_grid_settings->origin;
     //     Eigen::Vector3i res = _host_grid_settings->resolution;
-    //     double h = _host_grid_settings->stride;
-    //     double rng = _host_interpolator->_range;
+    //     float h = _host_grid_settings->stride;
+    //     float rng = _host_interpolator->_range;
 
-    //     double cell_vol_inv = 1.0 / (h*h*h);
+    //     float cell_vol_inv = 1.0 / (h*h*h);
 
     //     // Grid vertex range inside the interpolation kernel
     //     int index_l[3], index_u[3];
@@ -533,10 +533,10 @@ void MPMSolver3D::writeToOpenVDB(std::string filePath) {
     //                 // 1D index to access grid data
     //                 int gd_index = x + res(0)*(y + res(1)*z);
     //                 // Grid vertex world position
-    //                 Eigen::Vector3d gd_pos = ori + h * Eigen::Vector3d(x, y, z);
+    //                 Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
     //                 // PIC-FLIP
-    //                 double w = _host_interpolator->weight3D(mp_pos, gd_pos, h);
+    //                 float w = _host_interpolator->weight3D(mp_pos, gd_pos, h);
     //                 // Add density
     //                 openvdb::Coord coord(gd_pos(0), gd_pos(1), gd_pos(2));
     //                 float currentDensity = grid->tree().getValue(coord);

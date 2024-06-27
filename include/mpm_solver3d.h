@@ -26,13 +26,13 @@ public:
 
     MPMSolver3D(
         const thrust::host_vector<MaterialPoint3D> &particles,
-        Eigen::Vector3d gridOrigin,
+        Eigen::Vector3f gridOrigin,
         Eigen::Vector3i gridResolution,
-        double gridStride,
-        double gridBoundaryFrictionCoefficient,
-        double blendCoefficient,
+        float gridStride,
+        float gridBoundaryFrictionCoefficient,
+        float blendCoefficient,
         InterpolationType interpolationType,
-        double deltaTime
+        float deltaTime
     );
     ~MPMSolver3D();
 
@@ -50,19 +50,19 @@ public:
     void computeExternalForces();
     
     // Explicit integration
-    void updateGridVelocities(double deltaTimeInSeconds);
+    void updateGridVelocities(float deltaTimeInSeconds);
     // Implicit integration
-    void solveLinearSystem(double deltaTimeInSeconds);
+    void solveLinearSystem(float deltaTimeInSeconds);
 
-    void gridToParticles(double deltaTimeInSeconds, double blendCoefficient);
+    void gridToParticles(float deltaTimeInSeconds, float blendCoefficient);
 
-    void advectParticles(double deltaTimeInSeconds);
+    void advectParticles(float deltaTimeInSeconds);
 
     void computeGravityForces();
 
-    void gridCollision(double deltaTimeInSeconds);
+    void gridCollision(float deltaTimeInSeconds);
 
-    void particlesCollision(double deltaTimeInSeconds);
+    void particlesCollision(float deltaTimeInSeconds);
 
     // Rendering
     //  Online: OpenGL
@@ -83,12 +83,12 @@ protected:
     Grid3DSettings* _grid_settings;
     Grid3DSettings* _host_grid_settings;
     // Transfer: FLIP weight in PIC-FLIP blending
-    double _blend_coefficient;
+    float _blend_coefficient;
     // Interpolator for particle-grid transfer
     Interpolator3D* _interpolator;
     Interpolator3D* _host_interpolator;
     // Default time step
-    double _delta_time;
+    float _delta_time;
 
 
     // Rendering

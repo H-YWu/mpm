@@ -14,7 +14,7 @@ enum class InterpolationType {
 
 class Interpolator3D {
 public:
-    double _range;
+    float _range;
 
     __host__ __device__
     Interpolator3D(InterpolationType interpolationType);
@@ -23,10 +23,10 @@ public:
     ~Interpolator3D() { }
 
     __host__ __device__
-    double weight3D(Eigen::Vector3d particlePosition, Eigen::Vector3d gridPosition, double stride) const;
+    float weight3D(Eigen::Vector3f particlePosition, Eigen::Vector3f gridPosition, float stride) const;
 
     __host__ __device__
-    const Eigen::Vector3d weightGradient3D(Eigen::Vector3d particlePosition, Eigen::Vector3d gridPosition, double stride) const;
+    const Eigen::Vector3f weightGradient3D(Eigen::Vector3f particlePosition, Eigen::Vector3f gridPosition, float stride) const;
 
 private:
     InterpolationType _type;
@@ -39,24 +39,24 @@ private:
     // For weight3D:
 
     __host__ __device__
-    double linearN3D(double x) const;
+    float linearN3D(float x) const;
 
     __host__ __device__
-    double quadraticBSplineN3D(double x) const;
+    float quadraticBSplineN3D(float x) const;
 
     __host__ __device__
-    double cubicBSplineN3D(double x) const;
+    float cubicBSplineN3D(float x) const;
 
     // For weightGradient3D:
 
     __host__ __device__
-    double linearNDot3D(double x) const;
+    float linearNDot3D(float x) const;
 
     __host__ __device__
-    double quadraticBSplineNDot3D(double x) const;
+    float quadraticBSplineNDot3D(float x) const;
 
     __host__ __device__
-    double cubicBSplineNDot3D(double x) const;
+    float cubicBSplineNDot3D(float x) const;
 };
 
 }   // namespace chains

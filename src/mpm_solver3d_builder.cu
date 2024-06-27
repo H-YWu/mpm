@@ -7,7 +7,7 @@
 
 namespace chains {
 
-bool readXYZFile(const std::string& filePath, std::vector<Eigen::Vector3d>& points) {
+bool readXYZFile(const std::string& filePath, std::vector<Eigen::Vector3f>& points) {
     std::ifstream xyz_ifstream(filePath);
     if (!xyz_ifstream.is_open()) {
         std::cerr << "[ERROR] cannot open file " << filePath << std::endl;
@@ -17,7 +17,7 @@ bool readXYZFile(const std::string& filePath, std::vector<Eigen::Vector3d>& poin
     std::string line;
     while (std::getline(xyz_ifstream, line)) {
         std::stringstream ss(line);
-        Eigen::Vector3d point;
+        Eigen::Vector3f point;
         if (!(ss >> point.x() >> point.y() >> point.z())) {
             std::cerr << "[ERROR] cannot parse line: " << line  << " when trying to parse file " << filePath << std::endl;
             return false;
@@ -36,7 +36,7 @@ MPMSolver3D buildMPMSolver3DFromYAML(MPM3DConfiguration config, int& particlesNu
     size_t total_size = 0;
     std::cout << "[INFO] building " << groups_num << " group(s) of particle on host" << std::endl;
     for (size_t i = 0; i < groups_num; i ++) {
-        std::vector<Eigen::Vector3d> coords;
+        std::vector<Eigen::Vector3f> coords;
         readXYZFile(config.group_paths[i], coords);
         for (size_t j = 0; j < coords.size(); j ++) {
             particle_groups[i].push_back(

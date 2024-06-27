@@ -13,22 +13,22 @@ namespace chains {
 struct MPM3DConfiguration {
     // Particle groups
     std::vector<std::string> group_paths;
-    std::vector<Eigen::Vector3d> velocities;
-    std::vector<double>
+    std::vector<Eigen::Vector3f> velocities;
+    std::vector<float>
         masses,
         youngs, poissons, hardenings,
         compressions, stretches;
     std::vector<ConstitutiveModel> constitutive_models;
     // Grid
-    Eigen::Vector3d origin;
+    Eigen::Vector3f origin;
     Eigen::Vector3i resolution;
-    double stride, friction_coeff;
+    float stride, friction_coeff;
     // Transfer
-    double blend_coeff;
+    float blend_coeff;
     // Interpolation
     InterpolationType interp_type;
     // Simulate
-    double delta_time;
+    float delta_time;
     // Render
     bool offline;
     std::string particle_frag_shader_path;
