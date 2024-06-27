@@ -11,6 +11,8 @@
 #include <thrust/tabulate.h>
 #include <iostream>
 #include <limits>
+#include <openvdb/openvdb.h>
+#include <openvdb/io/Stream.h>
 
 namespace chains {
 
@@ -48,30 +50,24 @@ MPMSolver3D::MPMSolver3D(
     thrust::copy(particles.begin(), particles.end(), _particles.begin());
     CUDA_CHECK_LAST_ERROR();
 
-    // Build GridSettings
-    Grid3DSettings* grid_settings;
-    grid_settings = (Grid3DSettings*)malloc(sizeof(Grid3DSettings));
-    *grid_settings= Grid3DSettings(
+    // Build GridSettings on host and device
+    _host_grid_settings = (Grid3DSettings*)malloc(sizeof(Grid3DSettings));
+    *_host_grid_settings= Grid3DSettings(
         gridOrigin,
         gridResolution,
         gridStride,
         gridBoundaryFrictionCoefficient
     );
-    //  --copy to device--
+    //  Copy to device
     CUDA_CHECK(cudaMalloc((void**) &_grid_settings, sizeof(Grid3DSettings)));
-    CUDA_CHECK(cudaMemcpy(_grid_settings, grid_settings, sizeof(Grid3DSettings), cudaMemcpyHostToDevice));
-    //  --free host--
-    free(grid_settings);
+    CUDA_CHECK(cudaMemcpy(_grid_settings, _host_grid_settings, sizeof(Grid3DSettings), cudaMemcpyHostToDevice));
 
-    // Build interpolator
-    Interpolator3D* interpolator;
-    interpolator = (Interpolator3D*)malloc(sizeof(Interpolator3D));
-    *interpolator = Interpolator3D(interpolationType);
-    //  --copy to device--
+    // Build interpolator on host and device
+    _host_interpolator = (Interpolator3D*)malloc(sizeof(Interpolator3D));
+    *_host_interpolator = Interpolator3D(interpolationType);
+    //  Copy to device
     CUDA_CHECK(cudaMalloc((void**) &_interpolator, sizeof(Interpolator3D)));
-    CUDA_CHECK(cudaMemcpy(_interpolator, interpolator, sizeof(Interpolator3D), cudaMemcpyHostToDevice));
-    //  --free host--
-    free(interpolator);
+    CUDA_CHECK(cudaMemcpy(_interpolator, _host_interpolator, sizeof(Interpolator3D), cudaMemcpyHostToDevice));
 
     std::cout << "[INFO] building grid of "
               << gridResolution(0) << " x " << gridResolution(1) << " x " << gridResolution(2)
@@ -89,7 +85,7 @@ MPMSolver3D::MPMSolver3D(
 
     _enable_particles_collision = false;
 
-    std::cout << "[INFO] initialization particle initial volume" << std::endl;
+    std::cout << "[INFO] initializing particle initial volume" << std::endl;
     // IMPORTANT: Compute the initialize volume of each particle
     initialize();
 }
@@ -153,9 +149,9 @@ void MPMSolver3D::initialize() {
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
                 for (int z = index_l[2]; z <= index_u[2]; z ++) {
-                     if (x < 0 || x > res(0)
-                      || y < 0 || y > res(1)
-                      || z < 0 || z > res(2)) continue; // Ensure the vertex is inside the grid
+                     if (x < 0 || x >= res(0)
+                      || y < 0 || y >= res(1)
+                      || z < 0 || z >= res(2)) continue; // Ensure the vertex is inside the grid
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
@@ -193,9 +189,9 @@ void MPMSolver3D::initialize() {
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
                 for (int z = index_l[2]; z <= index_u[2]; z ++) {
-                     if (x < 0 || x > res(0)
-                      || y < 0 || y > res(1)
-                      || z < 0 || z > res(2)) continue; // Ensure the vertex is inside the grid
+                     if (x < 0 || x >= res(0)
+                      || y < 0 || y >= res(1)
+                      || z < 0 || z >= res(2)) continue; // Ensure the vertex is inside the grid
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
@@ -204,7 +200,7 @@ void MPMSolver3D::initialize() {
                     double w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
 
                     // PIC-FLIP
-                    double m_ip = mp.mass * w;
+                    double m_ip = grid_ptr[gd_index].mass * w;
                     //  accumulate density
                     mp_density += m_ip * inv_cell_vol;
                 }
@@ -260,9 +256,9 @@ void MPMSolver3D::particlesToGrid() {
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
                 for (int z = index_l[2]; z <= index_u[2]; z ++) {
-                     if (x < 0 || x > res(0)
-                      || y < 0 || y > res(1)
-                      || z < 0 || z > res(2)) continue; // Ensure the vertex is inside the grid
+                     if (x < 0 || x >= res(0)
+                      || y < 0 || y >= res(1)
+                      || z < 0 || z >= res(2)) continue; // Ensure the vertex is inside the grid
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
@@ -339,9 +335,9 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
                 for (int z = index_l[2]; z <= index_u[2]; z ++) {
-                     if (x < 0 || x > res(0)
-                      || y < 0 || y > res(1)
-                      || z < 0 || z > res(2)) continue; // Ensure the vertex is inside the grid
+                     if (x < 0 || x >= res(0)
+                      || y < 0 || y >= res(1)
+                      || z < 0 || z >= res(2)) continue; // Ensure the vertex is inside the grid
                     // 1D index to access grid data
                     int gd_index = x + res(0)*(y + res(1)*z);
                     // Grid vertex world position
@@ -352,7 +348,7 @@ void MPMSolver3D::gridToParticles(double deltaTimeInSeconds, double blendCoeffic
 
                     // PIC-FLIP
                     CollocatedGridData3D grid_data = grid_ptr[gd_index];
-                    vel_pic = grid_data.velocity_star * w;
+                    vel_pic += grid_data.velocity_star * w;
                     vel_flip += (grid_data.velocity_star-grid_data.velocity) * w;
                     vel_grad += grid_data.velocity_star * gradw.transpose();
                 }
@@ -391,7 +387,7 @@ void MPMSolver3D::advectParticles(double deltaTimeInSeconds) {
 void MPMSolver3D::computeGravityForces() {
     auto addGravityForce = [=] __device__ (CollocatedGridData3D& gd) {
         if (gd.mass > std::numeric_limits<double>::epsilon()) {
-            gd.force(1) -= 9.80665; // m/s^2
+            gd.force(1) -= 9.80665 * gd.mass; // m/s^2
         }
     };
 
@@ -501,8 +497,61 @@ void MPMSolver3D::updateGLBufferByCPU() {
     glUnmapBuffer(GL_ARRAY_BUFFER);
 }
 
-void MPMSolver3D::writeToFile(std::string filePath) {
+void MPMSolver3D::writeToOpenVDB(std::string filePath) {
+    // Copy particles to host
+    std::vector<MaterialPoint3D> h_particles(_particles.size());
+    thrust::copy(_particles.begin(), _particles.end(), h_particles.begin());
 
+    // Create a OpenVDB DoubleGrid
+    // openvdb::DoubleGrid::Ptr grid = openvdb::DoubleGrid::create();
+
+    // Build OpenVDB grid
+    // Rasterize particles to grid: density
+    // for (auto &mp : h_particles) {
+    //     Eigen::Vector3d mp_pos = mp.position;
+
+    //     Eigen::Vector3d ori = _host_grid_settings->origin;
+    //     Eigen::Vector3i res = _host_grid_settings->resolution;
+    //     double h = _host_grid_settings->stride;
+    //     double rng = _host_interpolator->_range;
+
+    //     double cell_vol_inv = 1.0 / (h*h*h);
+
+    //     // Grid vertex range inside the interpolation kernel
+    //     int index_l[3], index_u[3];
+    //     for (int i = 0; i < 3; i ++) {
+    //         index_l[i] = ceil(mp_pos(i)/h - rng);
+    //         index_u[i] = floor(mp_pos(i)/h + rng);
+    //     }
+
+    //     for (int x = index_l[0]; x <= index_u[0]; x ++) {
+    //         for (int y = index_l[1]; y <= index_u[1]; y ++) {
+    //             for (int z = index_l[2]; z <= index_u[2]; z ++) {
+    //                  if (x < 0 || x >= res(0)
+    //                   || y < 0 || y >= res(1)
+    //                   || z < 0 || z >= res(2)) continue; // Ensure the vertex is inside the grid
+    //                 // 1D index to access grid data
+    //                 int gd_index = x + res(0)*(y + res(1)*z);
+    //                 // Grid vertex world position
+    //                 Eigen::Vector3d gd_pos = ori + h * Eigen::Vector3d(x, y, z);
+
+    //                 // PIC-FLIP
+    //                 double w = _host_interpolator->weight3D(mp_pos, gd_pos, h);
+    //                 // Add density
+    //                 openvdb::Coord coord(gd_pos(0), gd_pos(1), gd_pos(2));
+    //                 float currentDensity = grid->tree().getValue(coord);
+    //                 grid->tree().setValue(coord, currentDensity + mp.mass*w*cell_vol_inv);
+    //             }
+    //         }
+    //     }
+    // }
+
+    // // Write grid to file
+    // openvdb::io::File file(filePath);
+    // openvdb::GridPtrVec grids;
+    // grids.push_back(grid);
+    // file.write(grids);
+    // file.close();
 }
 
 }   // namespace chains

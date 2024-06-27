@@ -1,5 +1,7 @@
 #include "interpolation3d.h"
 
+#include <limits>
+
 namespace chains {
 
 __host__ __device__
@@ -7,7 +9,6 @@ Interpolator3D::Interpolator3D(InterpolationType interpolationType)
 : _type(interpolationType) {
     setRange();
 }
-
 
 __host__ __device__
 double Interpolator3D::weight3D(Eigen::Vector3d particlePosition, Eigen::Vector3d gridPosition, double stride) const {
@@ -94,7 +95,7 @@ double Interpolator3D::linearN3D(double x) const {
 __host__ __device__
 double Interpolator3D::linearNDot3D(double x) const {
     double xabs = abs(x);
-    if (xabs < 1.0 && xabs > 0.0) {   // Absolute value is always >= 0.0 
+    if (xabs < 1.0 && xabs > std::numeric_limits<double>::epsilon()) {   // Absolute value is always >= 0.0 
         // Avoid undefined derivative
         return -x/xabs; 
     } else return 0.0;
@@ -105,7 +106,7 @@ double Interpolator3D::quadraticBSplineN3D(double x) const {
     double xabs = abs(x);
     if (xabs < 0.5) {   // Absolute value is always >= 0.0
         return 0.75 - xabs*xabs;
-    } else if (xabs >= 0.5 && xabs < 1.5) {
+    } else if (xabs < 1.5) {
         return 0.5*pow(1.5-xabs, 2);
     } else return 0.0;
 }
@@ -115,8 +116,8 @@ double Interpolator3D::quadraticBSplineNDot3D(double x) const {
     double xabs = abs(x);
     if (xabs < 0.5) {   // Absolute value is always >= 0.0 
         return - 2.0*x; 
-    } else if (xabs >= 0.5 && xabs < 1.5) {
-        return -(1.5*x)/xabs + x;
+    } else if (xabs < 1.5) {
+        return -(1.5*x/xabs) + x;
     } else return 0.0;
 }
 
@@ -125,7 +126,7 @@ double Interpolator3D::cubicBSplineN3D(double x) const {
     double xabs = abs(x);
     if (xabs < 1.0) {   // Absolute value is always >= 0.0
         return 0.5*pow(xabs, 3) - xabs*xabs + 2.0/3.0;
-    } else if (xabs >= 1.0 && xabs < 2.0) {
+    } else if (xabs < 2.0) {
         return pow(2.0-xabs, 3) / 6.0;
     } else return 0.0;
 }
@@ -135,8 +136,8 @@ double Interpolator3D::cubicBSplineNDot3D(double x) const {
     double xabs = abs(x);
     if (xabs < 1.0) {   // Absolute value is always >= 0.0 
         return 1.5*x*xabs - 2.0*x; 
-    } else if (xabs >= 1.0 && xabs < 2.0) {
-        return -(2.0*x)/xabs + 2.0*x - (x*xabs)/2.0;
+    } else if (xabs < 2.0) {
+        return -(2.0*x/xabs) + 2.0*x - 0.5*(x*xabs);
     } else return 0.0;
 }
 

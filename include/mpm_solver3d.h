@@ -73,7 +73,7 @@ public:
     void saveGLBuffer(const GLuint buffer);
     void updateGLBufferByCPU();
     //  Offline
-    void writeToFile(std::string filePath);
+    void writeToOpenVDB(std::string filePath);
 
 protected:
     // Lagrangian
@@ -81,10 +81,12 @@ protected:
     // Eulerian
     thrust::device_vector<CollocatedGridData3D> _grid;
     Grid3DSettings* _grid_settings;
+    Grid3DSettings* _host_grid_settings;
     // Transfer: FLIP weight in PIC-FLIP blending
     double _blend_coefficient;
     // Interpolator for particle-grid transfer
     Interpolator3D* _interpolator;
+    Interpolator3D* _host_interpolator;
     // Default time step
     double _delta_time;
 

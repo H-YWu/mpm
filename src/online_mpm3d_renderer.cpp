@@ -32,8 +32,8 @@ OnlineMPM3DRenderer::OnlineMPM3DRenderer(
 
     Eigen::Vector3f center = 0.5f * (gridOrigin+gridTarget);
 
-    auto target_pos = glm::vec3(center(0), center(1), center(2));
-    auto camera_pos = target_pos + glm::vec3(_grid_displacement(0), -0.4*_grid_displacement(1), 1.3*_grid_displacement(2));
+    auto target_pos = glm::vec3(center(0), center(1), 2.0*center(2));
+    auto camera_pos = target_pos + glm::vec3(0.0, 0.5*_grid_displacement(1), 1.0*_grid_displacement(2));
 
     _view_mat =
         glm::lookAt(

@@ -5,9 +5,9 @@
 
 namespace chains {
 
-std::string createDirectoryWithPrefixAndCurrentTime(const std::string& prefix);
+std::string createNewDirectoryInParentDirectoryWithPrefixAndCurrentTime(const std::string &parentDirectoryPath, const std::string& prefix);
 
-std::string createFileWithPaddingNumberNameInDirectory(int number, size_t padding, std::string directory);
+std::string createFileWithPaddingNumberNameInDirectory(int number, size_t padding, const std::string &directory, const std::string &fileExtension);
 
 }
 

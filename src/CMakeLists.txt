@@ -21,7 +21,7 @@ add_library(imgui_lib ${IMGUI_SRC})
 target_include_directories(imgui_lib PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends/)
 ## Target: external libraries
 add_library(external_libs INTERFACE)
-target_link_libraries(external_libs INTERFACE CUDA::cudart CUDA::cuda_driver cudadevrt glfw glad Eigen3::Eigen yaml-cpp glm::glm imgui_lib)
+target_link_libraries(external_libs INTERFACE CUDA::cudart CUDA::cuda_driver cudadevrt OpenVDB::openvdb glfw glad Eigen3::Eigen yaml-cpp glm::glm imgui_lib)
 ## Target: general compiler flags
 add_library(compiler_flags INTERFACE)
 target_compile_features(compiler_flags INTERFACE cxx_std_17)
@@ -38,7 +38,7 @@ set(msvc_cuda_release_flags --compiler-options /MD)
 set(gcc_cxx_debug_flags -g -O0)
 set(gcc_cxx_release_flags -O3)
 set(gcc_cuda_debug_flags --debug --device-debug)
-set(gcc_cuda_release_flags --optimize 3 --dopt 3)
+set(gcc_cuda_release_flags --optimize 3)
 #### Apply common flags
 target_compile_options(developer_flags INTERFACE $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>)
 target_compile_options(developer_flags INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>)

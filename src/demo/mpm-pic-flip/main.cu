@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 
 bool isRunningOnWSL() {
     const char* wslEnv = std::getenv("WSLENV");
@@ -52,13 +53,15 @@ int main(int argc, const char *argv[]) {
     std::string config_file_path = argv[1];
     chains::MPM3DConfiguration config = chains::parseYAML(config_file_path);
 
-    std::string program_name = argv[0];
     int particles_num = -1;
     chains::MPMSolver3D solver = chains::buildMPMSolver3DFromYAML(config, particles_num);
 
     std::string output_dir;
     if (config.offline) {   // Offline rendering: write to disk
-        output_dir = chains::createDirectoryWithPrefixAndCurrentTime(program_name);
+        std::filesystem::path program_path = argv[0];
+        std::filesystem::path file_path = argv[1];
+        std::string output_dir_name = program_path.stem().string() + "-" + file_path.stem().string();
+        output_dir = chains::createNewDirectoryInParentDirectoryWithPrefixAndCurrentTime("../output", output_dir_name);
     }
 
     // glfw: initialize and configure
@@ -159,8 +162,6 @@ int main(int argc, const char *argv[]) {
     int step = 0;
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
-        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
-            solver.switchIfEnableParticlesCollision();
         
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -172,8 +173,10 @@ int main(int argc, const char *argv[]) {
             ImGui::Begin("Information");
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::Text("Simulation step #%d", step);
-            std::string isParticleCollision = solver._enable_particles_collision == true? "ON" : "OFF";
-            ImGui::Text("Material Point Collision %s", isParticleCollision.c_str());
+            bool isParticleCollisionEnabled = solver._enable_particles_collision;
+            if (ImGui::Checkbox("Material Point Collision", &isParticleCollisionEnabled)) {
+                solver.switchIfEnableParticlesCollision();
+            }
             ImGui::End();
         }
 
@@ -194,8 +197,8 @@ int main(int argc, const char *argv[]) {
         
         // Offline rendering
         if (config.offline) {
-            std::string file_path = chains::createFileWithPaddingNumberNameInDirectory(step, 5, output_dir);
-            solver.writeToFile(file_path);
+            std::string file_path = chains::createFileWithPaddingNumberNameInDirectory(step, 5, output_dir, ".vdb");
+            solver.writeToOpenVDB(file_path);
         }
 
         // glfw: swap buffers and poll IO events
