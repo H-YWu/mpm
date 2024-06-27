@@ -91,6 +91,8 @@ MPMSolver3D::MPMSolver3D(
 }
 
 MPMSolver3D::~MPMSolver3D() {
+    free(_host_grid_settings);
+    free(_host_interpolator);
     CUDA_CHECK(cudaFree(_grid_settings));
     CUDA_CHECK(cudaFree(_interpolator));
 }
@@ -498,60 +500,67 @@ void MPMSolver3D::updateGLBufferByCPU() {
 }
 
 void MPMSolver3D::writeToOpenVDB(std::string filePath) {
-    // Copy particles to host
+    // Copy particles to host.
     std::vector<MaterialPoint3D> h_particles(_particles.size());
     thrust::copy(_particles.begin(), _particles.end(), h_particles.begin());
 
-    // Create a OpenVDB floatGrid
-    // openvdb::floatGrid::Ptr grid = openvdb::floatGrid::create();
+    // Initialize the OpenVDB library.  This must be called at least
+    // once per program and may safely be called multiple times.
+    openvdb::initialize();
 
-    // Build OpenVDB grid
-    // Rasterize particles to grid: density
-    // for (auto &mp : h_particles) {
-    //     Eigen::Vector3f mp_pos = mp.position;
+    // Create an empty floating-point grid with background value 0.
+    openvdb::FloatGrid::Ptr grid = openvdb::FloatGrid::create();
+    grid->setName("density");
+    // Get an accessor for coordinate-based access to voxels.
+    openvdb::FloatGrid::Accessor accessor = grid->getAccessor();
 
-    //     Eigen::Vector3f ori = _host_grid_settings->origin;
-    //     Eigen::Vector3i res = _host_grid_settings->resolution;
-    //     float h = _host_grid_settings->stride;
-    //     float rng = _host_interpolator->_range;
+    // Build the density grid.
+    // Rasterize particles to grid.
+    for (auto &mp : h_particles) {
+        Eigen::Vector3f mp_pos = mp.position;
 
-    //     float cell_vol_inv = 1.0 / (h*h*h);
+        Eigen::Vector3f ori = _host_grid_settings->origin;
+        Eigen::Vector3i res = _host_grid_settings->resolution;
+        float h = _host_grid_settings->stride;
+        float rng = _host_interpolator->_range;
 
-    //     // Grid vertex range inside the interpolation kernel
-    //     int index_l[3], index_u[3];
-    //     for (int i = 0; i < 3; i ++) {
-    //         index_l[i] = ceil(mp_pos(i)/h - rng);
-    //         index_u[i] = floor(mp_pos(i)/h + rng);
-    //     }
+        float cell_vol_inv = 1.0 / (h*h*h);
 
-    //     for (int x = index_l[0]; x <= index_u[0]; x ++) {
-    //         for (int y = index_l[1]; y <= index_u[1]; y ++) {
-    //             for (int z = index_l[2]; z <= index_u[2]; z ++) {
-    //                  if (x < 0 || x >= res(0)
-    //                   || y < 0 || y >= res(1)
-    //                   || z < 0 || z >= res(2)) continue; // Ensure the vertex is inside the grid
-    //                 // 1D index to access grid data
-    //                 int gd_index = x + res(0)*(y + res(1)*z);
-    //                 // Grid vertex world position
-    //                 Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
+        // Grid vertex range inside the interpolation kernel.
+        int index_l[3], index_u[3];
+        for (int i = 0; i < 3; i ++) {
+            index_l[i] = ceil(mp_pos(i)/h - rng);
+            index_u[i] = floor(mp_pos(i)/h + rng);
+        }
 
-    //                 // PIC-FLIP
-    //                 float w = _host_interpolator->weight3D(mp_pos, gd_pos, h);
-    //                 // Add density
-    //                 openvdb::Coord coord(gd_pos(0), gd_pos(1), gd_pos(2));
-    //                 float currentDensity = grid->tree().getValue(coord);
-    //                 grid->tree().setValue(coord, currentDensity + mp.mass*w*cell_vol_inv);
-    //             }
-    //         }
-    //     }
-    // }
+        for (int x = index_l[0]; x <= index_u[0]; x ++) {
+            for (int y = index_l[1]; y <= index_u[1]; y ++) {
+                for (int z = index_l[2]; z <= index_u[2]; z ++) {
+                     if (x < 0 || x >= res(0)
+                      || y < 0 || y >= res(1)
+                      || z < 0 || z >= res(2)) continue; // Ensure that the vertex is inside the grid.
+                    // 1D index to access grid data
+                    int gd_index = x + res(0)*(y + res(1)*z);
+                    // Grid vertex world position
+                    Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
-    // // Write grid to file
-    // openvdb::io::File file(filePath);
-    // openvdb::GridPtrVec grids;
-    // grids.push_back(grid);
-    // file.write(grids);
-    // file.close();
+                    // PIC-FLIP
+                    float w = _host_interpolator->weight3D(mp_pos, gd_pos, h);
+                    // Add density
+                    openvdb::Coord coord(x, y, z);
+                    float currentDensity = accessor.getValue(coord);
+                    accessor.setValue(coord, currentDensity + mp.mass*w*cell_vol_inv);
+                }
+            }
+        }
+    }
+
+    // Write grid to file.
+    openvdb::io::File file(filePath);
+    openvdb::GridPtrVec grids;
+    grids.push_back(grid);
+    file.write(grids);
+    file.close();
 }
 
 }   // namespace chains
