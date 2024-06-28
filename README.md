@@ -1,5 +1,7 @@
 # A Naive GPU Implementation of Material Point Method
 
+![Hello, MPM!](./figs/hello_mpm.png)
+
 ## Tested Environment
 
 - Operating System: Windows Subsystem for Linux (Windows 11, Ubuntu 22.04.3 LTS)
