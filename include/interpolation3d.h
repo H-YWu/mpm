@@ -1,20 +1,17 @@
 #ifndef CHAINS_INTERPOLATION3D_H_
 #define CHAINS_INTERPOLATION3D_H_
 
+#include "enums.h"
+
 #include <Eigen/Dense>
 #include <cuda_runtime.h>
 
 namespace chains {
 
-enum class InterpolationType {
-    LINEAR,
-    QUADRATIC_BSPLINE,
-    CUBIC_BSPLINE
-};
-
 class Interpolator3D {
 public:
     float _range;
+    InterpolationType _type;
 
     __host__ __device__
     Interpolator3D(InterpolationType interpolationType);
@@ -29,7 +26,6 @@ public:
     const Eigen::Vector3f weightGradient3D(Eigen::Vector3f particlePosition, Eigen::Vector3f gridPosition, float stride) const;
 
 private:
-    InterpolationType _type;
 
     // Set interpolation-kernel-supported range (absolute distance) 
     //  Called in constructor

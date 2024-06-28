@@ -1,5 +1,5 @@
-#ifndef CHAINS_MATERIAL_POINT3D_H_
-#define CHAINS_MATERIAL_POINT3D_H_
+#ifndef CHAINS_APIC_MATERIAL_POINT3D_H_
+#define CHAINS_APIC_MATERIAL_POINT3D_H_
 
 #include "enums.h"
 
@@ -9,9 +9,9 @@
 
 namespace chains {
 
-/* PIC-FLIP 3D Material Point */
+/* APIC 3D Material Point */
 
-struct MaterialPoint3D {
+struct APICMaterialPoint3D {
     float volume0, mass;
     Eigen::Vector3f position, velocity;
     Eigen::Matrix3f deformation_gradient_elastic, deformation_gradient_plastic;
@@ -20,11 +20,13 @@ struct MaterialPoint3D {
     float critical_compression, critical_stretch;
     ConstitutiveModel constitutive_model;
 
-    __host__ __device__
-    MaterialPoint3D() { }
+    Eigen::Matrix3f B, D, Dinv;   // for APIC transfer
 
     __host__ __device__
-    MaterialPoint3D(
+    APICMaterialPoint3D() { }
+
+    __host__ __device__
+    APICMaterialPoint3D(
         Eigen::Vector3f particlePosition,
         Eigen::Vector3f particleVelocity,
         float particleMass,
@@ -37,7 +39,7 @@ struct MaterialPoint3D {
     );
 
     __host__ __device__
-    ~MaterialPoint3D() { }
+    ~APICMaterialPoint3D() { }
 
     __device__
     const Eigen::Matrix3f volumeTimesCauchyStress();
@@ -74,4 +76,4 @@ struct MaterialPoint3D {
 
 }   // namespace chains
 
-#endif  // CHAINS_MATERIAL_POINT3D_H_
+#endif  // CHAINS_APIC_MATERIAL_POINT3D_H_

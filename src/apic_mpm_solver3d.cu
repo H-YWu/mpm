@@ -1,4 +1,4 @@
-#include "mpm_solver3d.h"
+#include "apic_mpm_solver3d.h"
 #include "collision_object3d.h"
 #include "create_file.h"
 #include "cuda_utils.h"
@@ -33,16 +33,15 @@ struct InstantiateCollocatedGridData3DWithIndex {
     }
 };
 
-MPMSolver3D::MPMSolver3D(
-    const thrust::host_vector<MaterialPoint3D> &particles,
+APICMPMSolver3D::APICMPMSolver3D(
+    const thrust::host_vector<APICMaterialPoint3D> &particles,
     Eigen::Vector3f gridOrigin,
     Eigen::Vector3i gridResolution,
     float gridStride,
     float gridBoundaryFrictionCoefficient,
-    float blendCoefficient,
     InterpolationType interpolationType,
     float deltaTime
-) : _blend_coefficient(blendCoefficient), _delta_time(deltaTime)
+) : _delta_time(deltaTime)
 {
     std::cout << "[INFO] copying particles to device" << std::endl;
     // Build particles
@@ -90,14 +89,14 @@ MPMSolver3D::MPMSolver3D(
     initialize();
 }
 
-MPMSolver3D::~MPMSolver3D() {
+APICMPMSolver3D::~APICMPMSolver3D() {
     free(_host_grid_settings);
     free(_host_interpolator);
     CUDA_CHECK(cudaFree(_grid_settings));
     CUDA_CHECK(cudaFree(_interpolator));
 }
 
-void MPMSolver3D::simulateOneStep() {
+void APICMPMSolver3D::simulateOneStep() {
     float dt = _delta_time;    // TODO: CFL
 
     // New grid for this step
@@ -115,7 +114,7 @@ void MPMSolver3D::simulateOneStep() {
 
     // PIC: Transfer velocity
     //  NOTICE: this includes updating paticles' deformation gradient 
-    gridToParticles(dt, _blend_coefficient);
+    gridToParticles(dt);
 
     if (_enable_particles_collision) {
         particlesCollision(dt);
@@ -124,20 +123,21 @@ void MPMSolver3D::simulateOneStep() {
     advectParticles(dt);
 }
 
-void MPMSolver3D::switchIfEnableParticlesCollision() {
+void APICMPMSolver3D::switchIfEnableParticlesCollision() {
     _enable_particles_collision = _enable_particles_collision==true? false : true;
 }
 
-void MPMSolver3D::initialize() {
+void APICMPMSolver3D::initialize() {
     CollocatedGridData3D* grid_ptr = thrust::raw_pointer_cast(&_grid[0]);
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
     Interpolator3D* interpolator_ptr = _interpolator; 
 
-    auto P2GMass = [=] __device__ (MaterialPoint3D& mp) {
+    auto P2GMass = [=] __device__ (APICMaterialPoint3D& mp) {
         Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
         float h = grid_settings_ptr->stride;
         float rng = interpolator_ptr->_range;
+        auto interp_type = interpolator_ptr->_type;
 
         Eigen::Vector3f mp_pos = mp.position;
     
@@ -147,6 +147,14 @@ void MPMSolver3D::initialize() {
             index_l[i] = ceil(mp_pos(i)/h - rng);
             index_u[i] = floor(mp_pos(i)/h + rng);
         }
+
+        // Precompute Dinv
+        float k = 0.0;
+        if (interp_type == InterpolationType::CUBIC_BSPLINE) k = 1/3.0; 
+        if (interp_type == InterpolationType::QUADRATIC_BSPLINE) k = 1/4.0; 
+        // TODO: linear case
+        mp.D = k * h*h * Eigen::Matrix3f::Identity();
+        mp.Dinv = mp.D.inverse();
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
@@ -161,7 +169,7 @@ void MPMSolver3D::initialize() {
 
                     float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
 
-                    // PIC-FLIP
+                    // APIC 
                     //  mass
                     float m_ip = mp.mass * w;
                     atomicAdd(&(grid_ptr[gd_index].mass), m_ip);
@@ -170,7 +178,7 @@ void MPMSolver3D::initialize() {
         }
     };
 
-    auto G2PVolume = [=] __device__ (MaterialPoint3D& mp) {
+    auto G2PVolume = [=] __device__ (APICMaterialPoint3D& mp) {
         Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
         float h = grid_settings_ptr->stride;
@@ -201,7 +209,7 @@ void MPMSolver3D::initialize() {
 
                     float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
 
-                    // PIC-FLIP
+                    // APIC 
                     float m_ip = grid_ptr[gd_index].mass * w;
                     //  accumulate density
                     mp_density += m_ip * inv_cell_vol;
@@ -222,7 +230,7 @@ void MPMSolver3D::initialize() {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::resetGrid() {
+void APICMPMSolver3D::resetGrid() {
     thrust::for_each(
         thrust::device,
         _grid.begin(),
@@ -234,12 +242,12 @@ void MPMSolver3D::resetGrid() {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::particlesToGrid() {
+void APICMPMSolver3D::particlesToGrid() {
     CollocatedGridData3D* grid_ptr = thrust::raw_pointer_cast(&_grid[0]);
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
     Interpolator3D* interpolator_ptr = _interpolator; 
 
-    auto P2G = [=] __device__ (MaterialPoint3D& mp) {
+    auto P2G = [=] __device__ (APICMaterialPoint3D& mp) {
         Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
         float h = grid_settings_ptr->stride;
@@ -254,6 +262,7 @@ void MPMSolver3D::particlesToGrid() {
             index_u[i] = floor(mp_pos(i)/h + rng);
         }
 
+        Eigen::Matrix3f C = mp.B * mp.Dinv;
         Eigen::Matrix3f vol_stress = -mp.volumeTimesCauchyStress();
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
@@ -270,16 +279,17 @@ void MPMSolver3D::particlesToGrid() {
                     float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
                     Eigen::Vector3f gradw = interpolator_ptr->weightGradient3D(mp_pos, gd_pos, h);
 
-                    // PIC-FLIP
+                    // APIC
                     float m_ip = mp.mass * w;
                     Eigen::Vector3f f_ip = vol_stress * gradw;
                     //  mass
                     atomicAdd(&(grid_ptr[gd_index].mass), m_ip);
                     //  velocity
                     //      WARNING: grid velocity is not normalized here
-                    atomicAdd(&(grid_ptr[gd_index].velocity(0)), mp.velocity(0)*m_ip);
-                    atomicAdd(&(grid_ptr[gd_index].velocity(1)), mp.velocity(1)*m_ip);
-                    atomicAdd(&(grid_ptr[gd_index].velocity(2)), mp.velocity(2)*m_ip);
+                    Eigen::Vector3f v_ip = m_ip * (mp.velocity + C*(gd_pos-mp_pos));
+                    atomicAdd(&(grid_ptr[gd_index].velocity(0)), v_ip(0));
+                    atomicAdd(&(grid_ptr[gd_index].velocity(1)), v_ip(1));
+                    atomicAdd(&(grid_ptr[gd_index].velocity(2)), v_ip(2));
                     //  elastic force
                     atomicAdd(&(grid_ptr[gd_index].force(0)), f_ip(0));
                     atomicAdd(&(grid_ptr[gd_index].force(1)), f_ip(1));
@@ -293,11 +303,11 @@ void MPMSolver3D::particlesToGrid() {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::computeExternalForces() {
+void APICMPMSolver3D::computeExternalForces() {
     computeGravityForces();
 }
 
-void MPMSolver3D::updateGridVelocities(float deltaTimeInSeconds) {
+void APICMPMSolver3D::updateGridVelocities(float deltaTimeInSeconds) {
     thrust::for_each(
         thrust::device,
         _grid.begin(),
@@ -309,16 +319,16 @@ void MPMSolver3D::updateGridVelocities(float deltaTimeInSeconds) {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::solveLinearSystem(float deltaTimeInSeconds) {
+void APICMPMSolver3D::solveLinearSystem(float deltaTimeInSeconds) {
     // TODO
 }
 
-void MPMSolver3D::gridToParticles(float deltaTimeInSeconds, float blendCoefficient) {
+void APICMPMSolver3D::gridToParticles(float deltaTimeInSeconds) {
     CollocatedGridData3D* grid_ptr = thrust::raw_pointer_cast(&_grid[0]);
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
     Interpolator3D* interpolator_ptr = _interpolator; 
 
-    auto computeVelocityAndItsGradient = [=] __device__ (MaterialPoint3D& mp) -> thrust::pair<Eigen::Vector3f, Eigen::Matrix3f> {
+    auto computeVelocityAndItsGradient = [=] __device__ (APICMaterialPoint3D& mp) -> thrust::pair<Eigen::Vector3f, Eigen::Matrix3f> {
         Eigen::Vector3f ori = grid_settings_ptr->origin;
         Eigen::Vector3i res = grid_settings_ptr->resolution;
         float h = grid_settings_ptr->stride;
@@ -334,8 +344,8 @@ void MPMSolver3D::gridToParticles(float deltaTimeInSeconds, float blendCoefficie
         }
 
         Eigen::Matrix3f vel_grad(Eigen::Matrix3f::Zero());
-        Eigen::Vector3f vel_pic(Eigen::Vector3f::Zero());
-        Eigen::Vector3f vel_flip(mp.velocity);
+        Eigen::Vector3f vel_apic(Eigen::Vector3f::Zero());
+        mp.B.setZero();
 
         for (int x = index_l[0]; x <= index_u[0]; x ++) {
             for (int y = index_l[1]; y <= index_u[1]; y ++) {
@@ -351,25 +361,24 @@ void MPMSolver3D::gridToParticles(float deltaTimeInSeconds, float blendCoefficie
                     float w = interpolator_ptr->weight3D(mp_pos, gd_pos, h);
                     Eigen::Vector3f gradw = interpolator_ptr->weightGradient3D(mp_pos, gd_pos, h);
 
-                    // PIC-FLIP
+                    // APIC 
                     CollocatedGridData3D grid_data = grid_ptr[gd_index];
-                    vel_pic += grid_data.velocity_star * w;
-                    vel_flip += (grid_data.velocity_star-grid_data.velocity) * w;
+                    Eigen::Vector3f v_ip = grid_data.velocity_star * w;
+                    vel_apic += v_ip;
                     vel_grad += grid_data.velocity_star * gradw.transpose();
+                    mp.B += v_ip * (gd_pos-mp_pos).transpose();
                 }
             }
         }
 
-        Eigen::Vector3f vel = blendCoefficient*vel_flip + (1.0-blendCoefficient)*vel_pic;
-
-        return thrust::make_pair(vel, vel_grad);
+        return thrust::make_pair(vel_apic, vel_grad);
     };
 
     thrust::for_each(
         thrust::device,
         _particles.begin(),
         _particles.end(),
-        [=] __device__ (MaterialPoint3D& mp) {
+        [=] __device__ (APICMaterialPoint3D& mp) {
             auto vel_pair = computeVelocityAndItsGradient(mp);
             mp.updateDeformationGradient(vel_pair.second, deltaTimeInSeconds);
             mp.velocity = vel_pair.first;
@@ -378,12 +387,12 @@ void MPMSolver3D::gridToParticles(float deltaTimeInSeconds, float blendCoefficie
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::advectParticles(float deltaTimeInSeconds) {
+void APICMPMSolver3D::advectParticles(float deltaTimeInSeconds) {
     thrust::for_each(
         thrust::device,
         _particles.begin(),
         _particles.end(),
-        [=] __device__ (MaterialPoint3D& mp) {
+        [=] __device__ (APICMaterialPoint3D& mp) {
             mp.updatePosition(deltaTimeInSeconds);
         }
     );
@@ -391,7 +400,7 @@ void MPMSolver3D::advectParticles(float deltaTimeInSeconds) {
 }
 
 
-void MPMSolver3D::computeGravityForces() {
+void APICMPMSolver3D::computeGravityForces() {
     auto addGravityForce = [=] __device__ (CollocatedGridData3D& gd) {
         if (gd.mass > std::numeric_limits<float>::epsilon()) {
             gd.force(1) -= 9.80665 * gd.mass; // m/s^2
@@ -402,7 +411,7 @@ void MPMSolver3D::computeGravityForces() {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::gridCollision(float deltaTimeInSeconds) {
+void APICMPMSolver3D::gridCollision(float deltaTimeInSeconds) {
     CollocatedGridData3D* grid_ptr = thrust::raw_pointer_cast(&_grid[0]);
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
 
@@ -425,13 +434,13 @@ void MPMSolver3D::gridCollision(float deltaTimeInSeconds) {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::particlesCollision(float deltaTimeInSeconds) {
+void APICMPMSolver3D::particlesCollision(float deltaTimeInSeconds) {
     Grid3DSettings* grid_settings_ptr = _grid_settings; 
     thrust::for_each(
         thrust::device,
         _particles.begin(),
         _particles.end(),
-        [=] __device__ (MaterialPoint3D& mp) {
+        [=] __device__ (APICMaterialPoint3D& mp) {
             Eigen::Vector3f ori = grid_settings_ptr->origin;
             Eigen::Vector3f tar = grid_settings_ptr->target;
             float coeff = grid_settings_ptr->boundary_friction_coefficient;
@@ -444,17 +453,17 @@ void MPMSolver3D::particlesCollision(float deltaTimeInSeconds) {
     CUDA_CHECK_LAST_ERROR();
 }
 
-void MPMSolver3D::registerGLBufferWithCUDA(const GLuint buffer) {
+void APICMPMSolver3D::registerGLBufferWithCUDA(const GLuint buffer) {
     // Enable CUDA to directly map and access the buffer
     CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&_cuda_vbo_resource, buffer, cudaGraphicsMapFlagsWriteDiscard));
 }
 
-void MPMSolver3D::saveGLBuffer(const GLuint buffer) {
+void APICMPMSolver3D::saveGLBuffer(const GLuint buffer) {
     // Storing the OpenGL buffer ID for future use
     _vbo_buffer = buffer;
 }
 
-void MPMSolver3D::updateGLBufferWithCUDA() {
+void APICMPMSolver3D::updateGLBufferWithCUDA() {
     float4* buf_ptr;
     size_t buf_size;
 
@@ -468,7 +477,7 @@ void MPMSolver3D::updateGLBufferWithCUDA() {
         _particles.begin(),
         _particles.end(),
         buf_ptr,
-        [=] __device__ (MaterialPoint3D& mp) -> float4 {
+        [=] __device__ (APICMaterialPoint3D& mp) -> float4 {
             return make_float4(
                 mp.position(0),
                 mp.position(1),
@@ -481,7 +490,7 @@ void MPMSolver3D::updateGLBufferWithCUDA() {
     CUDA_CHECK(cudaGraphicsUnmapResources(1, &_cuda_vbo_resource, nullptr));
 }
 
-void MPMSolver3D::updateGLBufferByCPU() {
+void APICMPMSolver3D::updateGLBufferByCPU() {
     // Map OpenGL buffer for writing
     glBindBuffer(GL_ARRAY_BUFFER, _vbo_buffer);
     float4 *buf_ptr = (float4*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
@@ -490,11 +499,11 @@ void MPMSolver3D::updateGLBufferByCPU() {
     
     assert(buf_ptr != nullptr && buf_size >= _particles.size() * sizeof(float4));
     // Copy data from _particles to host particles 
-    std::vector<MaterialPoint3D> h_particles(_particles.size());
+    std::vector<APICMaterialPoint3D> h_particles(_particles.size());
     thrust::copy(_particles.begin(), _particles.end(), h_particles.begin());
     // Transform and copy data from h_particles to buf_ptr (OpenGL buffer)
     for (size_t i = 0; i < h_particles.size(); i ++) {
-        const MaterialPoint3D& mp = h_particles[i];
+        const APICMaterialPoint3D& mp = h_particles[i];
         buf_ptr[i] = make_float4(
             mp.position(0),
             mp.position(1),
@@ -507,9 +516,9 @@ void MPMSolver3D::updateGLBufferByCPU() {
     glUnmapBuffer(GL_ARRAY_BUFFER);
 }
 
-void MPMSolver3D::writeToOpenVDB(std::string filePath) {
+void APICMPMSolver3D::writeToOpenVDB(std::string filePath) {
     // Copy particles to host.
-    std::vector<MaterialPoint3D> h_particles(_particles.size());
+    std::vector<APICMaterialPoint3D> h_particles(_particles.size());
     thrust::copy(_particles.begin(), _particles.end(), h_particles.begin());
 
     // Initialize the OpenVDB library.  This must be called at least
@@ -552,7 +561,7 @@ void MPMSolver3D::writeToOpenVDB(std::string filePath) {
                     // Grid vertex world position
                     Eigen::Vector3f gd_pos = ori + h * Eigen::Vector3f(x, y, z);
 
-                    // PIC-FLIP
+                    // APIC 
                     float w = _host_interpolator->weight3D(mp_pos, gd_pos, h);
                     // Add density
                     openvdb::Coord coord(x, y, z);

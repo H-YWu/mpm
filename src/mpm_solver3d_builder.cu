@@ -79,4 +79,53 @@ MPMSolver3D buildMPMSolver3DFromYAML(MPM3DConfiguration config, int& particlesNu
     return solver;
 }
 
+APICMPMSolver3D buildAPICMPMSolver3DFromYAML(MPM3DConfiguration config, int& particlesNumber) {
+    // Build all particles
+    size_t groups_num = config.group_paths.size();
+    std::vector<thrust::host_vector<APICMaterialPoint3D>> particle_groups(groups_num);
+    size_t total_size = 0;
+    std::cout << "[INFO] building " << groups_num << " group(s) of particle on host" << std::endl;
+    for (size_t i = 0; i < groups_num; i ++) {
+        std::vector<Eigen::Vector3f> coords;
+        readXYZFile(config.group_paths[i], coords);
+        for (size_t j = 0; j < coords.size(); j ++) {
+            particle_groups[i].push_back(
+                APICMaterialPoint3D(
+                    config.stride * coords[j],
+                    config.velocities[i],
+                    config.masses[i],
+                    config.hardenings[i],
+                    config.youngs[i],
+                    config.poissons[i],
+                    config.compressions[i],
+                    config.stretches[i],
+                    config.constitutive_models[i]
+                )
+            );
+        }
+        std::cout << "[INFO] particle group " << i << " has " << particle_groups[i].size() << " particles" << std::endl;
+        total_size += particle_groups[i].size();
+    }
+    std::cout << "[INFO] stacking all " << total_size << " particles on host" << std::endl;
+    thrust::host_vector<APICMaterialPoint3D> particles;
+    particlesNumber = total_size;
+    particles.reserve(total_size);
+    for (const auto& group : particle_groups) {
+        thrust::copy(group.begin(), group.end(), std::back_inserter(particles));
+    }
+
+    std::cout << "[INFO] building MPM Solver 3D" << std::endl;
+    APICMPMSolver3D solver(
+        particles,
+        config.origin,
+        config.resolution,
+        config.stride,
+        config.friction_coeff,
+        config.interp_type,
+        config.delta_time
+    );
+
+    return solver;
+}
+
 }   // namespace chains

@@ -1,7 +1,7 @@
 #include <glad/glad.h>
 
 #include "mpm_solver3d_builder.h"
-#include "mpm_solver3d.h"
+#include "apic_mpm_solver3d.h"
 #include "online_mpm3d_renderer.h"
 #include "create_file.h"
 
@@ -54,7 +54,7 @@ int main(int argc, const char *argv[]) {
     chains::MPM3DConfiguration config = chains::parseYAML(config_file_path);
 
     int particles_num = -1;
-    chains::MPMSolver3D solver = chains::buildMPMSolver3DFromYAML(config, particles_num);
+    chains::APICMPMSolver3D solver = chains::buildAPICMPMSolver3DFromYAML(config, particles_num);
 
     std::string output_dir;
     if (config.offline) {   // Offline rendering: write to disk
@@ -87,9 +87,9 @@ int main(int argc, const char *argv[]) {
     const unsigned int window_height = 720;
 
     // glfw window creation
-    GLFWwindow* window = glfwCreateWindow(window_width, window_height, "MPM PIC-FLIP", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(window_width, window_height, "MPM APIC", nullptr, nullptr);
     if (!window) {
-        std::cerr << "[ERROR]  Failed to create GLFW window" << std::endl;
+        std::cerr << "[ERROR] Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return EXIT_FAILURE;
     }

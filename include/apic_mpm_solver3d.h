@@ -1,10 +1,10 @@
-#ifndef CHAINS_MPM_SOLVER_3D_H_
-#define CHAINS_MPM_SOLVER_3D_H_
+#ifndef CHAINS_APIC_MPM_SOLVER_3D_H_
+#define CHAINS_APIC_MPM_SOLVER_3D_H_
 
 #include <glad/glad.h>
 
+#include "apic_material_point3d.h"
 #include "enums.h"
-#include "material_point3d.h"
 #include "grid3d.h"
 #include "interpolation3d.h"
 
@@ -15,24 +15,22 @@
 
 namespace chains {
 
+/* APIC 3D Material Point Method Solver */
 
-/* PIC-FLIP 3D Material Point Method Solver */
-
-class MPMSolver3D {
+class APICMPMSolver3D {
 public:
     bool _enable_particles_collision;
 
-    MPMSolver3D(
-        const thrust::host_vector<MaterialPoint3D> &particles,
+    APICMPMSolver3D(
+        const thrust::host_vector<APICMaterialPoint3D> &particles,
         Eigen::Vector3f gridOrigin,
         Eigen::Vector3i gridResolution,
         float gridStride,
         float gridBoundaryFrictionCoefficient,
-        float blendCoefficient,
         InterpolationType interpolationType,
         float deltaTime
     );
-    ~MPMSolver3D();
+    ~APICMPMSolver3D();
 
     // Simulation
     void simulateOneStep();
@@ -52,7 +50,7 @@ public:
     // Implicit integration
     void solveLinearSystem(float deltaTimeInSeconds);
 
-    void gridToParticles(float deltaTimeInSeconds, float blendCoefficient);
+    void gridToParticles(float deltaTimeInSeconds);
 
     void advectParticles(float deltaTimeInSeconds);
 
@@ -75,13 +73,11 @@ public:
 
 protected:
     // Lagrangian
-    thrust::device_vector<MaterialPoint3D> _particles;
+    thrust::device_vector<APICMaterialPoint3D> _particles;
     // Eulerian
     thrust::device_vector<CollocatedGridData3D> _grid;
     Grid3DSettings* _grid_settings;
     Grid3DSettings* _host_grid_settings;
-    // Transfer: FLIP weight in PIC-FLIP blending
-    float _blend_coefficient;
     // Interpolator for particle-grid transfer
     Interpolator3D* _interpolator;
     Interpolator3D* _host_interpolator;
@@ -97,4 +93,4 @@ protected:
 
 }   // namespace chains
 
-#endif  // CHAINS_MPM_SOLVER_3D_H_
+#endif  // CHAINS_APIC_MPM_SOLVER_3D_H_
