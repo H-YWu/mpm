@@ -1,0 +1,24 @@
+ParticleGroups:
+  - File: ../data/cube_sparse.xyz
+    Mass: 2.0 
+    Velocity: [0.0, 0.0, 0.0]
+    YoungModulus: 1.4e5
+    PoissonRatio: 0.2
+    HardeningCoefficient: 10 
+    CriticalCompression: 2.5e-2
+    CriticalStretch: 7.5e-3
+    ConstitutiveModel: FixedCorotated
+Grid:
+  Origin: [0.0, 0.0, 0.0]
+  Resolution: [200, 200, 200]
+  Stride: 5e-3 
+  BoundaryFrictionCoefficient: 0.9
+Transfer:
+  BlendCoefficient: 0.95
+Interpolation:
+  Type: CubicBSpline
+Simulate:
+  deltaTime: 1e-3
+Render:
+  Offline: false 
+  ParticleFragmentShader: ../shader/snow.frag
