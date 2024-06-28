@@ -1,5 +1,5 @@
 ParticleGroups:
-  - File: ../data/ball1_sparse.xyz
+  - File: ../data/ball1.xyz
     Mass: 2.0
     Velocity: [2.5, 0.0, 0.0]
     YoungModulus: 1.4e5
@@ -8,7 +8,7 @@ ParticleGroups:
     CriticalCompression: 5.0e-2
     CriticalStretch: 9.0e-3
     ConstitutiveModel: FixedCorotated
-  - File: ../data/ball2_sparse.xyz
+  - File: ../data/ball2.xyz
     Mass: 2.0
     Velocity: [-2.5, 0.0, 0.0]
     YoungModulus: 1.4e5
